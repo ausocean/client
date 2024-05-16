@@ -10,8 +10,8 @@ cloud services.
 If you wish to contribute to this project, please contact
 info@ausocean.org for permissions. Pull requests require an
 accompanying issue.  Please see [client issues]
-(https://bitbucket.org/ausocean/client/issues) for current issues, or
-creation of an issue.
+(https://github.com/ausocean/client/issues)
+for current issues, or creation of an issue.
 
 # License
 
