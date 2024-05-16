@@ -1,0 +1,10 @@
+[Unit]
+Description=Netsender client for monitoring router logs and statistics. 
+
+[Service]
+Type=simple
+ExecStart=/home/pi/go/src/bitbucket.org/ausocean/iot/pi/cmd/router-netsender/run.sh
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

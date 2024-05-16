@@ -1,0 +1,10 @@
+[Unit]
+Description=Netsender client for reading I2C sensor values. 
+
+[Service]
+Type=simple
+ExecStart=/home/pi/go/src/bitbucket.org/ausocean/iot/pi/cmd/i2c-netsender/run.sh
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

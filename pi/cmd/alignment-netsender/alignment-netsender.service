@@ -1,0 +1,10 @@
+[Unit]
+Description=Netsender Client for CPE alignment using LSM303 mag/accel module and servo.
+
+[Service]
+Type=simple
+ExecStart=/home/pi/go/src/github.com/ausocean/utils/cmd/alignment-netsender/pi_run.sh
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
