@@ -195,7 +195,7 @@ type PinReadWrite func(pin *Pin) error
 // local consts
 const (
 	pkgName         = "netsender"
-	version         = 162
+	version         = 170
 	defaultService  = "data.cloudblue.org"
 	monPeriod       = 60
 	tagsFile        = "/var/netsender/tags.conf"
@@ -354,6 +354,7 @@ func (ns *Sender) Run() error {
 				}
 			}
 		}
+
 		reply, rc, err = ns.Send(RequestPoll, inputs)
 		if err != nil {
 			return err
@@ -481,12 +482,19 @@ func (ns *Sender) TestDownload() error {
 	if err != nil {
 		return fmt.Errorf("could not do download speed test request: %w", err)
 	}
-	dur := time.Now().Sub(now).Seconds()
-	defer resp.Body.Close()
-
 	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
 		return fmt.Errorf("download test request response status is %d and not 200 OK", resp.StatusCode)
 	}
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return fmt.Errorf("download test failed to read body: %v", err)
+	}
+	if len(body) != downloadTestSize {
+		return fmt.Errorf("download test expected %d bytes, got %d bytes", downloadTestSize, len(body))
+	}
+	dur := time.Now().Sub(now).Seconds()
 
 	// Calculate download speed in bits/s.
 	ns.download = int((downloadTestSize * 8) / dur)
