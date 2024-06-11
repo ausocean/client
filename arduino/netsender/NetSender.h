@@ -6,7 +6,7 @@
     See https://www.cloudblue.org
 
   License:
-    Copyright (C) 2017-2023 The Australian Ocean Lab (AusOcean).
+    Copyright (C) 2017-2024 The Australian Ocean Lab (AusOcean).
 
     This file is part of NetSender. NetSender is free software: you can
     redistribute it and/or modify it under the terms of the GNU
@@ -29,7 +29,7 @@
 
 namespace NetSender {
 
-#define VERSION                171
+#define VERSION                172
 
 #define WIFI_SIZE              80
 #define DKEY_SIZE              20

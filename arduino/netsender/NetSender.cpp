@@ -60,6 +60,7 @@ enum bootReason {
   bootNormal = 0x00,
   bootWiFi   = 0x01,
   bootAlarm  = 0x02,
+  bootClear  = 0x03,
 };
 
 enum httpStatusCode {
@@ -614,9 +615,9 @@ bool wifiControl(bool on) {
   return true;
 }
 
-// connect to WiFi (after calling wifiControl)
+// wifiConnect attempt to connects to the supplied WiFi network.
+// wifi is network info as CSV "ssid,key" (ssid must not contain a comma!)
 bool wifiConnect(const char * wifi) {
-  // wifi is network info as CSV "ssid,key" (ssid must not contain a comma!)
   // NB: only works for WPA/WPA2 network
   char ssid[WIFI_SIZE], *key;
   if (wifi[0] == '\0') {
@@ -653,6 +654,20 @@ bool wifiConnect(const char * wifi) {
   LocalAddress = WiFi.localIP();
   if (Debug) Serial.print(F("Obtained DHCP IP address ")), Serial.println(LocalAddress);
   return true;
+}
+
+// wifiBegin attempts to begin a WiFi session, first, using the
+// configured hotspot and, second, using the default hotspot.
+bool wifiBegin() {
+  bool ok = wifiControl(true);
+  if (ok) {
+    ok = wifiConnect(Config.wifi);
+    if (!ok && strcmp(Config.wifi, DEFAULT_WIFI) != 0) {
+      delay(WIFI_DELAY);
+      ok = wifiConnect(DEFAULT_WIFI);
+    }
+  }
+  return ok;
 }
 
 // httpRequest sends a request to an HTTP server and gets the response,
@@ -699,7 +714,9 @@ bool httpRequest(String url, String body, String& reply) {
 // Issue a single request, writing polled values to 'inputs' and actuated values to 'outputs'.
 // Sets 'reconfig' true if reconfiguration is required, false otherwise.
 // Side effects: 
-//   Updates, enters debug mode or reboots according to the response code ("rc").
+//   Updates VarSum global when differs from the varsum ("vs") parameter.
+//   Sets Configured global to false for update and alarm requests.
+//   Updates, enters debug mode or alarm mode, or reboots according to the response code ("rc").
 bool request(RequestType req, Pin * inputs, Pin * outputs, bool * reconfig, String& reply) {
   char path[MAX_PATH];
   String param;
@@ -830,7 +847,7 @@ bool request(RequestType req, Pin * inputs, Pin * outputs, bool * reconfig, Stri
 
 // request config, and return true upon success, or false otherwise
 // Side effects:
-//   Sets Configured to true upon success.
+//   Sets Configured global to true upon success.
 bool config() {
   String reply, error, param;
   bool reconfig = false;
@@ -892,7 +909,7 @@ bool config() {
 // Retrieve vars from data host, return the persistent vars and
 // set changed to true if a persistent var has changed.
 // Transient vars, such as "id" are not saved.
-// Missing persistent vars default to 0, except for the peak voltage.
+// Missing persistent vars default to 0, except for peak voltage and auto restart.
 bool getVars(int vars[MAX_VARS], bool* changed) {
   String reply, error, id, param;
   bool reconfig;
@@ -1035,6 +1052,8 @@ bool run(int* varsum) {
   unsigned long pulsed = 0;
   long lag = 0;
   unsigned long now = millis();
+  int vars[MAX_VARS];
+  bool changed;
 
   // Measure lag to maintain accuracy between cycles.
   if (Time > 0 && now > Time) {
@@ -1045,6 +1064,21 @@ bool run(int* varsum) {
     }
   }
   Time = now; // record the start of each cycle
+
+  // Have we just restarted due to an alarm?
+  if (Config.boot == bootAlarm) {
+    // Clear the boot state so we only perform this check once per restart.
+    // NB: bootClear is a transient state that we don't write to the EEPROM.
+    Config.boot = bootClear;
+    // Attempt to refresh vars in case the recent alarm was due to operator error.
+    if (wifiBegin() && getVars(vars, &changed)) {
+      if (changed) {
+        if (Debug) Serial.println(F("Persistent variable(s) changed"));
+        writeVars(vars);
+      }
+      *varsum = VarSum;
+    }
+  }
 
   // Restart if the alarm has gone for on too long.
   // NB: Check AlarmedTime regardless of whether XPin[xAlarmed] is true or not.
@@ -1119,15 +1153,7 @@ bool run(int* varsum) {
   }
 
   // Turn on WiFI, connect, and then send input values and/or receive output values.
-  bool ok = wifiControl(true);
-  if (ok) {
-    ok = wifiConnect(Config.wifi);
-    if (!ok && strcmp(Config.wifi, DEFAULT_WIFI) != 0) {
-      delay(WIFI_DELAY);
-      ok = wifiConnect(DEFAULT_WIFI);
-    }
-  }
-  if (!ok) {
+  if (!wifiBegin()) {
     NetworkFailures++;
     if (Config.vars[pvAlarmNetwork] > 0 && NetworkFailures >= Config.vars[pvAlarmNetwork]) {
       // too many network failures; raise the alarm!
@@ -1174,8 +1200,6 @@ bool run(int* varsum) {
   }
 
   if (*varsum != VarSum) {
-    int vars[MAX_VARS];
-    bool changed;
     if (!getVars(vars, &changed)) {
       wifiControl(false);
       return pause(false, pulsed, &lag);
