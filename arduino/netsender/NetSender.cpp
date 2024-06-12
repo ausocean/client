@@ -57,10 +57,10 @@ namespace NetSender {
 
 // Constants:
 enum bootReason {
-  bootNormal = 0x00,
-  bootWiFi   = 0x01,
-  bootAlarm  = 0x02,
-  bootClear  = 0x03,
+  bootNormal = 0x00, // Normal reboot (operator requested).
+  bootWiFi   = 0x01, // Reboot due to WiFi error.
+  bootAlarm  = 0x02, // Alarm auto-restart.
+  bootClear  = 0x03, // Alarm cleared; written when config or vars updated following an auto-restart.
 };
 
 enum httpStatusCode {
@@ -532,8 +532,12 @@ void writeAlarm(bool alarm, bool continuous) {
 
 // restart restarts the ESP8266, saving the reason, and raising an
 // alarm before restarting when alarm is true.
+// NB: For restart purposes, bootClear is treated like bootAlarm.
 void restart(bootReason reason, bool alarm) {
   if (Debug) Serial.print(F("Restarting (")), Serial.print(reason), Serial.print(F(",")), Serial.print(alarm), Serial.println(F(")"));
+  if (Config.boot == bootClear) {
+    Config.boot = bootAlarm;
+  }
   if (reason != Config.boot) {
     if (Debug) Serial.print(F("Writing boot reason: ")), Serial.println(reason);
     Config.boot = reason;
@@ -1068,7 +1072,6 @@ bool run(int* varsum) {
   // Have we just restarted due to an alarm?
   if (Config.boot == bootAlarm) {
     // Clear the boot state so we only perform this check once per restart.
-    // NB: bootClear is a transient state that we don't write to the EEPROM.
     Config.boot = bootClear;
     // Attempt to refresh vars in case the recent alarm was due to operator error.
     if (wifiBegin() && getVars(vars, &changed)) {

@@ -29,7 +29,7 @@
 
 namespace NetSender {
 
-#define VERSION                172
+#define VERSION                173
 
 #define WIFI_SIZE              80
 #define DKEY_SIZE              20
