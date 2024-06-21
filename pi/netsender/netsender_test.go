@@ -34,7 +34,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"testing/clientest"
+	"testing/iotest"
 	"time"
 )
 
@@ -263,7 +263,7 @@ func TestJSONDecoder(t *testing.T) {
 }
 
 const (
-	testConfig          = "ma 00:00:00:00:00:01\ndk 10000001\nsh data.cloudblue.org\n" // contents of the netsender.conf used for testing.
+	testConfig = "ma 00:00:00:00:00:01\ndk 10000001\nsh data.cloudblue.org\n" // contents of the netsender.conf used for testing.
 )
 
 // TestSync tests synchronization of client mode and error values with NetReceiver.
@@ -281,20 +281,14 @@ func TestSync(t *testing.T) {
 		t.Errorf("netsender.New failed with error %v", err)
 	}
 
-	// Check our mode is Normal to begin with.
-	_, err = ns.Vars()
-	if err != nil {
-		t.Errorf("ns.Vars failed with error %v", err)
-	}
-	if ns.Mode() != "Normal" {
-		t.Errorf("Expected Normal for ns.Mode(), got %s", ns.Mode())
-	}
+	// Reset mode and error.
+	ns.setModeAndError(t, "Normal", "")
 
 	// Set our mode & error to Paused and TestError respectively.
-	ns.setModeAndEror(t, "Paused", "TestError")
+	ns.setModeAndError(t, "Paused", "TestError")
 
-	// Now reset our mode & error for next time.
-	ns.setModeAndEror(t, "Normal", "")
+	// Reset our mode and error
+	ns.setModeAndError(t, "Normal", "")
 }
 
 // TestTimeout tests timeout.
@@ -346,13 +340,13 @@ func createNetsenderConfig() (name string, err error) {
 	return name, nil
 }
 
-// setModeAndEror sets the mode and error and then tests that the values are as expected.
-func (ns *Sender) setModeAndEror(t *testing.T, mode, error string) {
+// setModeAndError sets the mode and error and then tests that the values are as expected.
+func (ns *Sender) setModeAndError(t *testing.T, mode, error string) {
+	ns.SetMode(mode)
+	ns.SetError(error)
 	vs := ns.VarSum()
-	ns.SetMode(mode, &vs)
-	ns.SetError(error, &vs)
-	if vs != 0 {
-		t.Errorf("Expected 0 for vs, got %d", vs)
+	if vs != -1 {
+		t.Errorf("Expected -1 for vs, got %d", vs)
 	}
 	vars, err := ns.Vars()
 	if err != nil {

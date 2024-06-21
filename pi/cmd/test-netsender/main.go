@@ -148,7 +148,7 @@ func burst(ns *netsender.Sender, burstPeriod int) {
 
 	mu.Lock()
 	tl.Log(netsender.InfoLevel, "Bursting done. Resetting mode to Normal.")
-	ns.SetMode("Normal", &varsum)
+	ns.SetMode("Normal")
 	bursting = false
 	mu.Unlock()
 }

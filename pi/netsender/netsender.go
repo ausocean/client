@@ -947,7 +947,7 @@ func (ns *Sender) Mode() string {
 }
 
 // SetMode sets the client mode, resets the client's varsum and forces a sync.
-func (ns *Sender) SetMode(mode string, vs *int) {
+func (ns *Sender) SetMode(mode string) {
 	ns.mu.Lock()
 	defer ns.mu.Unlock()
 	if mode == ns.mode {
@@ -955,7 +955,7 @@ func (ns *Sender) SetMode(mode string, vs *int) {
 	}
 	ns.mode = mode
 	ns.sync = true
-	*vs = 0
+	ns.varSum = -1
 }
 
 // Error gets the client error value.
@@ -967,7 +967,7 @@ func (ns *Sender) Error() string {
 }
 
 // SetError sets the client error, resets the client's varsum and forces a sync.
-func (ns *Sender) SetError(error string, vs *int) {
+func (ns *Sender) SetError(error string) {
 	ns.mu.Lock()
 	defer ns.mu.Unlock()
 	if error == ns.error {
@@ -975,7 +975,7 @@ func (ns *Sender) SetError(error string, vs *int) {
 	}
 	ns.error = error
 	ns.sync = true
-	*vs = 0
+	ns.varSum = -1
 }
 
 // Upgrade performs an upgrade of code to tag using the Sender.upgrader function
