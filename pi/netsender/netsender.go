@@ -155,10 +155,10 @@ const (
 	debugSetLogLevel      = "set log level"
 )
 
-// NetSender error identifiers.
-// NB: These are prefixed 'er' rather than 'err' to avoid confusion with Go errors
+// NetSender modes and errors.
 const (
-	erUpgrade = "upgradeError"
+	modeCompleted = "Completed"
+	errorUpgrade  = "upgradeError"
 )
 
 var errNoKey = errors.New("key not found in JSON")
@@ -442,7 +442,7 @@ func (ns *Sender) Run() error {
 
 	case ResponseUpgrade:
 		ns.logger.Log(InfoLevel, infoUpgradeRequest)
-		if ns.Mode() == "Completed" {
+		if ns.Mode() == modeCompleted {
 			return nil // Nothing to do.
 		}
 		if ns.IsUpgrading() {
@@ -986,7 +986,7 @@ func (ns *Sender) SetError(error string) {
 
 // Upgrade performs an upgrade of the device software for the
 // configured client type (ct) and client version (cv). Sets the mode
-// to "Completed" upon completion, successful or otherwise. Sets the
+// to modeCompleted upon completion, successful or otherwise. Sets the
 // error to errUpgrade if the upgrade fails.
 func (ns *Sender) Upgrade() {
 	ct := strings.ToLower(ns.Param("ct"))
@@ -1013,12 +1013,12 @@ func (ns *Sender) Upgrade() {
 
 	if err != nil {
 		ns.logger.Log(WarningLevel, warnUpgraderError, "upgrader", ns.upgrader, "ct", ct, "cv", cv)
-		ns.SetError(erUpgrade)
+		ns.SetError(errorUpgrade)
 	} else {
 		ns.logger.Log(InfoLevel, infoUpgraded, "upgrader", ns.upgrader, "ct", ct, "cv", cv)
 	}
 
-	ns.SetMode("Completed")
+	ns.SetMode(modeCompleted)
 	ns.Config()
 }
 
