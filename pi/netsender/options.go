@@ -92,9 +92,9 @@ func WithConfigFile(f string) Option {
 	}
 }
 
-// WithUpgrader returns an option that sets the upgrader function which is called
-// when netsender.Sender.Upgrade() is called.
-func WithUpgrader(u func(tag, user, gopath string) error) Option {
+// WithUpgrader returns an option that sets the upgrader script which is called
+// when an upgrade request is received.
+func WithUpgrader(u string) Option {
 	return func(s *Sender) error {
 		s.upgrader = u
 		return nil

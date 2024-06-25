@@ -39,7 +39,6 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
-	"os"
 	"os/exec"
 	"runtime"
 	"strconv"
@@ -127,6 +126,7 @@ const (
 	warnHttpResponse      = "error in response"
 	warnSetLogLevel       = "unsupported log level"
 	warnRebootError       = "error rebooting"
+	warnMissingDeviceType = "device type required for upgrade"
 	warnUpgraderNotFound  = "upgrader not found"
 	warnUpgraderError     = "error executing upgrader"
 	warnUpgradeFailed     = "upgrade failed"
@@ -137,13 +137,12 @@ const (
 	infoRebootRequest     = "received reboot request"
 	infoDebugRequest      = "received debug request"
 	infoUpgradeRequest    = "received upgrade request"
-	infoUpgradeCancelled  = "upgrade cancelled"
+	infoTestRequest       = "received test request"
+	infoShutdownRequest   = "received shutdown request"
 	infoRebooting         = "rebooting"
 	infoStackTrace        = "stack trace"
 	infoReceivedVars      = "received vars"
 	infoUpdateRequired    = "update required"
-	infoUpgradedAlready   = "already upgraded"
-	infoUpgradeStarting   = "upgrade starting"
 	infoUpgrading         = "upgrade in progress"
 	infoUpgraded          = "completed upgrade"
 	debugRunning          = "running"
@@ -156,12 +155,17 @@ const (
 	debugSetLogLevel      = "set log level"
 )
 
+// NetSender modes and errors.
+const (
+	modeCompleted = "Completed"
+	errorUpgrade  = "upgradeError"
+)
+
 var errNoKey = errors.New("key not found in JSON")
 
 // Sender represents state for a NetSender client.
 type Sender struct {
-	logger Logger // Our logger.
-
+	logger     Logger            // Our logger.
 	mu         sync.Mutex        // Protects our state.
 	configFile string            // Path to config file.
 	config     map[string]string // Our latest configuration.
@@ -171,15 +175,14 @@ type Sender struct {
 	mode       string            // Client mode.
 	error      string            // Client error string, if any.
 	sync       bool              // True if we need to sync client mode or error with the service, false otherwise.
-
-	init       PinInit                              // Pin initialization function, or nil.
-	read       PinReadWrite                         // Pin read function, or nil.
-	write      PinReadWrite                         // Pin write function, or nil.
-	upgradeCmd *exec.Cmd                            // Upgrade command, or nil if no upgrade is in progress.
-	configPins []Pin                                // Pins sent in the /config request.
-	upgrader   func(tag, user, gopath string) error // Upgrader function called for repo upgrade.
-
-	upload, download int // Will hold upload and download speeds in bps.
+	init       PinInit           // Pin initialization function, or nil.
+	read       PinReadWrite      // Pin read function, or nil.
+	write      PinReadWrite      // Pin write function, or nil.
+	configPins []Pin             // Pins sent in the config request.
+	upgrader   string            // Upgrader command.
+	upgrading  bool              // True if upgrading, false otherwise.
+	upload     int               // Measured upload speed in bits per second (in test mode).
+	download   int               // Measured download speed in bits per second (in test mode).
 }
 
 // PinInit defines a pin initialization function, which takes a Pin and arbitrary intialization data.
@@ -195,11 +198,9 @@ type PinReadWrite func(pin *Pin) error
 // local consts
 const (
 	pkgName         = "netsender"
-	version         = 170
+	version         = 171
 	defaultService  = "data.cloudblue.org"
 	monPeriod       = 60
-	tagsFile        = "/var/netsender/tags.conf"
-	upgrader        = "upgrade.sh"
 	rebooter        = "syncreboot"
 	defaultLogLevel = WarningLevel
 	stackTraceSize  = 1 << 16
@@ -214,9 +215,10 @@ func (e *ServerError) Error() string {
 	return e.er
 }
 
-// defaultConfigFile is the default path to the netsender config file.
-// This can be changed using the WithConfigFile option function.
-const defaultConfigFile = "/etc/netsender.conf"
+const (
+	defaultConfigFile = "/etc/netsender.conf" // Default config file. Customize with WithConfigFile.
+	defaultUpgrader   = "pkg-upgrade.sh"      // Default upgrade script. Customize with WithUpgrader
+)
 
 // Timeout is the timeout used for network calls.
 var Timeout = 20 * time.Second
@@ -261,6 +263,7 @@ func New(logger Logger, init PinInit, read, write PinReadWrite, options ...Optio
 func (ns *Sender) Init(logger Logger, init PinInit, read, write PinReadWrite, options ...Option) error {
 	ns.logger = logger
 	ns.configFile = defaultConfigFile
+	ns.upgrader = defaultUpgrader
 	// Set download upload speeds to -1 to indicate they have not been deduced yet.
 	ns.upload, ns.download = -1, -1
 	ns.init, ns.read, ns.write = init, read, write
@@ -399,10 +402,6 @@ func (ns *Sender) Run() error {
 	switch rc {
 	case ResponseUpdate:
 		ns.logger.Log(InfoLevel, infoUpdateRequest)
-		if ns.upgradeCmd != nil {
-			ns.upgradeCmd = nil
-			ns.logger.Log(InfoLevel, infoUpgradeCancelled)
-		}
 		_, err = ns.Config()
 		return err
 
@@ -420,7 +419,7 @@ func (ns *Sender) Run() error {
 		}
 
 	case ResponseShutdown:
-		ns.logger.Log(InfoLevel, "got shutdown request")
+		ns.logger.Log(InfoLevel, infoShutdownRequest)
 		if !ns.IsConfigured() {
 			ns.logger.Log(DebugLevel, "need to config for shutdown request")
 			_, err := ns.Config()
@@ -443,18 +442,19 @@ func (ns *Sender) Run() error {
 
 	case ResponseUpgrade:
 		ns.logger.Log(InfoLevel, infoUpgradeRequest)
-		err = ns.Upgrade(ns.Param("cv"))
-		if err != nil {
-			return fmt.Errorf("could not upgrade: %w", err)
+		if ns.Mode() == modeCompleted {
+			return nil // Nothing to do.
+		}
+		if ns.IsUpgrading() {
+			ns.logger.Log(InfoLevel, infoUpgrading)
+			return nil
 		}
 
-		_, err = ns.Config()
-		if err != nil {
-			return fmt.Errorf("could not get configuration information: %w", err)
-		}
+		// Perform the upgrade concurrently.
+		go ns.Upgrade()
 
 	case ResponseTest:
-		ns.logger.Log(InfoLevel, "net test requested")
+		ns.logger.Log(InfoLevel, infoTestRequest)
 		err := ns.TestDownload()
 		if err != nil {
 			return fmt.Errorf("could not test download speed: %w", err)
@@ -571,23 +571,22 @@ func (ns *Sender) Send(requestType int, pins []Pin, opts ...SendOption) (reply s
 	rc = ResponseNone
 
 	switch requestType {
-	case RequestPoll, RequestMts, RequestAct, RequestConfig:
+	case RequestPoll, RequestMts, RequestAct, RequestConfig, RequestVars:
 		path = fmt.Sprintf("/%s?vn=%d&ma=%s&dk=%s&ut=%d", requestTypes[requestType], version, ns.Param("ma"), ns.Param("dk"), uptime)
-
-	case RequestVars:
-		// Send the mode and error if we need to sync our client's values with the service's.
-		ns.mu.Lock()
-		sync := ns.sync
-		ns.mu.Unlock()
-		if sync {
-			path = fmt.Sprintf("/vars?vn=%d&ma=%s&dk=%s&md=%s&er=%s&ut=%d", version, ns.Param("ma"), ns.Param("dk"), ns.Mode(), ns.Error(), uptime)
-		} else {
-			path = fmt.Sprintf("/vars?vn=%d&ma=%s&dk=%s&ut=%d", version, ns.Param("ma"), ns.Param("dk"), uptime)
-		}
 
 	default:
 		return reply, rc, errors.New("Invalid request type: " + strconv.Itoa(requestType))
 	}
+
+	ns.mu.Lock()
+	if ns.sync {
+		// Sync the mode and (optionally) error with the service.
+		path += "&md=" + ns.mode
+		if ns.error != "" {
+			path += "&er=" + ns.error
+		}
+	}
+	ns.mu.Unlock()
 
 	// Append pin parameters to URL path.
 	for _, pin := range pins {
@@ -842,6 +841,13 @@ func (ns *Sender) IsConfigured() bool {
 	return ns.configured
 }
 
+// IsUpgrading returns true if an upgrade is is progress.
+func (ns *Sender) IsUpgrading() bool {
+	ns.mu.Lock()
+	defer ns.mu.Unlock()
+	return ns.upgrading
+}
+
 // Param returns a single config parameter value.
 func (ns *Sender) Param(param string) string {
 	ns.mu.Lock()
@@ -978,72 +984,42 @@ func (ns *Sender) SetError(error string) {
 	ns.varSum = -1
 }
 
-// Upgrade performs an upgrade of code to tag using the Sender.upgrader function
-// that is specified using the WithUpgrader option (see netsender/options.go).
-// The upgrader function specifies the actions that need to occur for the upgrade
-// to the provided tag. This would likely be a sequence of exec.Commands using git
-// to pull the new tag and perform any build instructions i.e. make commands.
-func (ns *Sender) Upgrade(tag string) error {
-	ns.logger.Log(DebugLevel, "upgrading")
-	if ns.upgrader == nil {
-		return errors.New("upgrader function has not been provided")
+// Upgrade performs an upgrade of the device software for the
+// configured client type (ct) and client version (cv). Sets the mode
+// to modeCompleted upon completion, successful or otherwise. Sets the
+// error to errorUpgrade if the upgrade fails.
+func (ns *Sender) Upgrade() {
+	ct := strings.ToLower(ns.Param("ct"))
+	if ct == "" {
+		ns.logger.Log(WarningLevel, warnMissingDeviceType)
+		return
+	}
+	cv := strings.ToLower(ns.Param("cv"))
+	if cv == "" {
+		cv = "@latest"
 	}
 
-	if tag == "" {
-		return errors.New("Empty tag")
-	}
+	ns.mu.Lock()
+	ns.upgrading = true
+	ns.mu.Unlock()
 
-	found, err := confHasTag(tag)
+	ns.logger.Log(InfoLevel, "upgrading", "upgrader", ns.upgrader, "ct", ct, "cv", cv)
+	cmd := exec.Command(ns.upgrader, ct, cv)
+	err := cmd.Run()
+
+	ns.mu.Lock()
+	ns.upgrading = false
+	ns.mu.Unlock()
+
 	if err != nil {
-		return fmt.Errorf("could not check for tag in tags.conf file: %w", err)
-	}
-	if found {
-		ns.logger.Log(InfoLevel, infoUpgradedAlready, "tag", tag)
-		return nil
-	}
-
-	// This will be recreated after upgrade success.
-	err = os.Remove(tagsFile)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("could not remove tags file: %w", err)
+		ns.logger.Log(WarningLevel, warnUpgraderError, "upgrader", ns.upgrader, "ct", ct, "cv", cv)
+		ns.SetError(errorUpgrade)
+	} else {
+		ns.logger.Log(InfoLevel, infoUpgraded, "upgrader", ns.upgrader, "ct", ct, "cv", cv)
 	}
 
-	// Find the user of the GOPATH.
-	gopath := os.Getenv("GOPATH")
-	if gopath == "" {
-		return errors.New("gopath is undefined")
-	}
-
-	// Get the user from the gopath.
-	split := strings.Split(gopath, "/")
-	if len(split) == 1 || len(split) == 0 {
-		return errors.New("could not split gopath")
-	}
-	user := split[2]
-
-	err = ns.upgrader(tag, user, gopath)
-	if err != nil {
-		return fmt.Errorf("could not perform upgrade: %w", err)
-	}
-
-	err = os.WriteFile(tagsFile, []byte(tag), 0644)
-	if err != nil {
-		return fmt.Errorf("could not write new tags file: %w", err)
-	}
-
-	return nil
-}
-
-// confHasTag checks for the presence of a tag in tags.conf
-func confHasTag(tag string) (bool, error) {
-	tags, err := os.ReadFile(tagsFile)
-	if errors.Is(err, os.ErrNotExist) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return sliceutils.ContainsString(strings.Split(string(tags), "\n"), tag), nil
+	ns.SetMode(modeCompleted)
+	ns.Config()
 }
 
 // writeConfig writes configuration info to configFile in configParams order.
