@@ -987,7 +987,7 @@ func (ns *Sender) SetError(error string) {
 // Upgrade performs an upgrade of the device software for the
 // configured client type (ct) and client version (cv). Sets the mode
 // to modeCompleted upon completion, successful or otherwise. Sets the
-// error to errUpgrade if the upgrade fails.
+// error to errorUpgrade if the upgrade fails.
 func (ns *Sender) Upgrade() {
 	ct := strings.ToLower(ns.Param("ct"))
 	if ct == "" {
