@@ -198,7 +198,7 @@ type PinReadWrite func(pin *Pin) error
 // local consts
 const (
 	pkgName         = "netsender"
-	version         = 171
+	version         = 172
 	defaultService  = "data.cloudblue.org"
 	monPeriod       = 60
 	rebooter        = "syncreboot"
@@ -1057,7 +1057,7 @@ func (s *Sender) readConfig() (map[string]string, error) {
 			continue
 		}
 		if sliceutils.ContainsString(configNumbers, name) {
-			if _, err := strconv.Atoi(val); err != nil {
+			if _, err := strconv.ParseInt(val, 10, 64); err != nil {
 				return nil, errors.New("Expected int for config param: " + name)
 			}
 		}
