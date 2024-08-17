@@ -44,7 +44,7 @@ function getParam() {
 cfg=$(cat "$ConfigFile")
 MA=$(getParam ma "$cfg")
 DK=$(getParam dk "$cfg")
-CT=$(getParam mp "$cfg")
+CT=$(getParam ct "$cfg")
 MP=$(getParam mp "$cfg")
 
 if [ -z "$MP" ]; then
@@ -119,9 +119,13 @@ while true; do
   
     "4")
       log "Info" "Received upgrade request"
-      sudo pkg-upgrade.sh "$ct" prereq
-      if [ $? -ne 0 ]; then
-          configure "mode=Completed"
+      log "Info" "pkg-upgrade.sh $CT @latest prereq"
+      bash -c "pkg-upgrade.sh $CT @latest prereq"
+      if [ $? -eq 0 ]; then
+	log "Info" "Upgrade succeeded"
+        configure "md=Completed"
+      else
+	log "Error" "Upgrade failed"
       fi
       ;;
   
