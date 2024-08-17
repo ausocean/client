@@ -6,9 +6,9 @@
 #   and monitor period (mp) and update /etc/netsender.conf
 # - Performing an upgrade.
 # - Rebooting.
-Version="v0.1.0"
-ConfigFile=/etc/netsender.conf
-LogFile="/var/log/netsender.log"
+Version="v0.2.0"
+ConfigFile="/etc/netsender.conf"
+LogFile="/var/log/netsender/netsender.log"
 URL="http://data.cloudblue.org"
 
 if [ "$1" == "-Version" ] || [ "$1" == "-v" ]; then
@@ -114,16 +114,15 @@ while true; do
       ;;
     "2")
       log "Info" "Received reboot request"
-      echo sudo reboot
+      sudo reboot
       ;;
   
     "4")
       log "Info" "Received upgrade request"
-      echo sudo pkg-upgrade.sh "$ct"
+      sudo pkg-upgrade.sh "$ct" prereq
       if [ $? -ne 0 ]; then
           configure "mode=Completed"
       fi
-      configure "mode=Completed"
       ;;
   
     *)
