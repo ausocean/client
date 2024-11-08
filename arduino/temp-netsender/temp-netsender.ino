@@ -45,8 +45,13 @@ LICENSE
 
 
 #define MAX_FAILURES 10
+#ifdef ESP8266
 #define DHTPIN       12
 #define DTPIN        13
+#else
+#define DHTPIN       36
+#define DTPIN        39
+#endif
 #define ZERO_CELSIUS 273.15 // In Kelvin.
 
 #define DHTTYPE DHT22 // external device #5 
