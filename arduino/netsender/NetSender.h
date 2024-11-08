@@ -29,15 +29,23 @@
 
 namespace NetSender {
 
+#ifdef ESP8266
 #define VERSION                173
+#define MAX_PINS               10
+#define DKEY_SIZE              20
+#define RESERVED_SIZE          48
+#endif
+#if defined ESP32 || defined LINUX
+#define VERSION                200
+#define MAX_PINS               20
+#define DKEY_SIZE              32
+#define RESERVED_SIZE          64
+#endif
 
 #define WIFI_SIZE              80
-#define DKEY_SIZE              20
-#define MAX_PINS               10
 #define PIN_SIZE               4
 #define IO_SIZE                (MAX_PINS * PIN_SIZE)
 #define MAX_VARS               10
-#define RESERVED_SIZE          48
 
 typedef enum {
   RequestConfig = 0,
@@ -46,22 +54,23 @@ typedef enum {
   RequestVars   = 3,
 } RequestType;
 
-// Configuration parameters are saved to the first 256 bytes of EEPROM as follows:
+// Configuration parameters are saved to the first 256 or 384 bytes of EEPROM
+// for the ESP8266 or ESP32 respectively as follows:
 //   Version        (length 2)
 //   Mon. period    (length 2)
 //   Act. period    (length 2)
 //   Boot           (length 2)
 //   WiFi ssid,key  (length 80)
-//   Device key     (length 20)
-//   Inputs         (length 40) // 10 x 4
-//   Outputs        (length 40) // 10 x 4
-//   Vars           (length 20) // 10 x 2
-//   Reserved       (length 48)
+//   Device key     (length 20 or 32)
+//   Inputs         (length 40 or 80) // 10 or 20 x 4
+//   Outputs        (length 40 or 80) // 10 or 20 x 4
+//   Vars           (length 20 or 40) // 10 x 2 or 4
+//   Reserved       (length 48 or 64)
 typedef struct {
-  int version;
-  int monPeriod;
-  int actPeriod;
-  int boot;
+  short version;
+  short monPeriod;
+  short actPeriod;
+  short boot;
   char wifi[WIFI_SIZE];
   char dkey[DKEY_SIZE];
   char inputs[IO_SIZE];

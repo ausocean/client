@@ -25,20 +25,43 @@
 #include <limits.h>
 #include <string.h>
 #include <ctype.h>
+
+#define ESP32
+
+#ifdef ESP8266
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
 #include <WiFiClient.h>
 #include <EEPROM.h>
-//#include "nonarduino.h"
+#endif
+#ifdef ESP32
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <EEPROM.h>
+#endif
+#ifdef LINUX
+#include "nonarduino.h"
+#endif
 
 #include "NetSender.h"
 
 namespace NetSender {
 
 // Hardware constants.
-#define ALARM_PIN              0    // GPIO pin indicating an alarm. Also controls the red LED.
-#define LED_PIN                2    // GPIO pin corresponding to blue LED.
+#ifdef ESP8266
+#define ALARM_PIN              0    // GPIO pin indicating an alarm. Controls the red LED.
+#define ALARM_LEVEL            LOW  // Level indicating an alarm state.
+#define LED_PIN                2    // GPIO pin corresponding to blue LED and nav light.
+#define BAT_PIN                0    // Analog pin that measures battery voltage.
 #define NUM_RELAYS             4    // Number of relays.
+#endif
+#if defined ESP32 || defined LINUX
+#define ALARM_PIN              5    // GPIO pin indicating an alarm. Controls the red LED.
+#define ALARM_LEVEL            HIGH // Level indicating an alarm state.
+#define LED_PIN                19   // GPIO pin corresponding to nav light.
+#define BAT_PIN                4    // Analog pin that measures battery voltage.
+#define NUM_RELAYS             5    // Number of relays.
+#endif
 
 // Default values.
 #define PEAK_VOLTAGE           845  // Default peak voltage, approximately 25.6V.
@@ -123,7 +146,7 @@ enum xIndex {
   x7,
   x8,
   x9,
-  xA0,
+  xBat,
   xAlarmed,
   xAlarms,
   xBoot,
@@ -135,20 +158,32 @@ enum xIndex {
 typedef struct {
   int pin;          // GPIO pin connected to the relay.
   const char *var;  // Boolean variable that actuates the relay.
-  bool alarm;       // True for the alarm pin, which is ON by default, not OFF.
+  bool on;          // Default logic level.
 } PowerPin;
 
 // Power pins.
 // NB: Update this array if the controller board is revised.
+// Power0 controls network equipment and should be on by default.
+#ifdef ESP8266
 PowerPin PowerPins[] = {
-  {ALARM_PIN, "Alarm",  true},
-  {16,        "Power1", false},
-  {14,        "Power2", false},
-  {15,        "Power3", false},
+  {0,  "Power0", true},
+  {16, "Power1", false},
+  {14, "Power2", false},
+  {15, "Power3", false},
 };
+#endif
+#if defined ESP32 || defined LINUX
+PowerPin PowerPins[] = {
+  {18, "Power0", true},
+  {32, "Power1", false},
+  {33, "Power2", false},
+  {25, "Power3", false},
+  {13, "Power4", false},
+};
+#endif
 
 // Variable types, which include both persistent vars and vars associated with power pins. PulseSuppress is included for convenience.
-const char* VarTypes = "{\"Pulses\":\"uint\", \"PulseWidth\":\"uint\", \"PulseDutyCycle\":\"uint\", \"PulseCycle\":\"uint\", \"AutoRestart\":\"uint\", \"AlarmPeriod\":\"uint\", \"AlarmNetwork\":\"uint\", \"AlarmVoltage\":\"uint\", \"AlarmRecoveryVoltage\":\"uint\", \"PeakVoltage\":\"uint\", \"Alarm\":\"bool\", \"Power1\":\"bool\", \"Power2\":\"bool\", \"Power3\":\"bool\", \"PulseSuppress\":\"bool\"}";
+const char* VarTypes = "{\"Pulses\":\"uint\", \"PulseWidth\":\"uint\", \"PulseDutyCycle\":\"uint\", \"PulseCycle\":\"uint\", \"AutoRestart\":\"uint\", \"AlarmPeriod\":\"uint\", \"AlarmNetwork\":\"uint\", \"AlarmVoltage\":\"uint\", \"AlarmRecoveryVoltage\":\"uint\", \"PeakVoltage\":\"uint\", \"Power0\":\"bool\", \"Power1\":\"bool\", \"Power2\":\"bool\", \"Power3\":\"bool\", \"PulseSuppress\":\"bool\"}";
 
 // Exported globals.
 Configuration Config;
@@ -165,7 +200,7 @@ static IPAddress LocalAddress;
 static unsigned long Time = 0;
 static unsigned long AlarmedTime = 0;
 static int NetworkFailures = 0;
-static int SimulatedA0 = 0;
+static int SimulatedBat = 0;
 
 // Forward declarations.
 void restart(bootReason, bool);
@@ -194,6 +229,18 @@ char * fmtMacAddress(byte mac[6], char str[MAC_SIZE]) {
   }
   *strp = '\0';
   return str;
+}
+
+// fmtLevel formats a logic level as a string.
+const char * fmtLevel(int level) {
+  switch (level) {
+  case LOW:
+    return "LOW";
+  case HIGH:
+    return "HIGH";
+  default:
+    return "";
+  }
 }
 
 // extractJson gets a string or integer value from JSON.
@@ -244,7 +291,7 @@ PowerPin * getPowerPin(int pin) {
 int setPins(const char * names, Pin * pins) {
   char *start = (char *)names;
   int ii = 0;
-  for (; ii < MAX_PINS; ii++) {
+  for (; *start != '\0' && ii < MAX_PINS; ii++) {
     char * finish = strchr(start, ',');
     if (finish == NULL) {
       strcpy(pins[ii].name, start);
@@ -262,16 +309,26 @@ int setPins(const char * names, Pin * pins) {
   return sz;
 }
 
-// resetPowerPins resets all power pins.
-void resetPowerPins() {
+// resetPowerPins resets all power pins and writes the ESP32 alarm pin.
+// When alarm is true, all pins are set to LOW regardless of their default level.
+// For the ESP32, the separate alarm pin is also set.
+void resetPowerPins(bool alarm) {
+  int level;
   for (int ii = 0; ii < NUM_RELAYS; ii++) {
-    if (PowerPins[ii].alarm) {
-      continue;
+    level = PowerPins[ii].on ? HIGH : LOW;
+    if (alarm) {
+      level = LOW;
     }
     pinMode(PowerPins[ii].pin, OUTPUT);
-    digitalWrite(PowerPins[ii].pin, LOW);
-    if (Debug) Serial.print(F("Reset power pin: D")), Serial.println(PowerPins[ii].pin);
+    digitalWrite(PowerPins[ii].pin, level);
+    if (Debug) Serial.print(F("Set power pin: D")), Serial.print(PowerPins[ii].pin), Serial.print(F(" ")), Serial.println(fmtLevel(level));
   }
+#ifdef ESP32
+  level = alarm ? ALARM_LEVEL : !ALARM_LEVEL;
+  pinMode(ALARM_PIN, OUTPUT);
+  digitalWrite(ALARM_PIN, level);
+  if (Debug) Serial.print(F("Set alarm pin: D")), Serial.print(ALARM_PIN), Serial.print(F(" ")), Serial.println(fmtLevel(level));
+#endif
 }
 
 // initPins initializes digital pins. On startup, power pins are also initialized.
@@ -279,40 +336,40 @@ void initPins(bool startup) {
   Pin pins[MAX_PINS];
 
   for (int ii = 0, sz = setPins(Config.inputs, pins); ii < sz; ii++) {
-    if (pins[ii].name[0] == 'D') {
+    if (pins[ii].name[0] == 'D' || pins[ii].name[0] == 'A') {
       int pn = atoi(pins[ii].name + 1);
       pinMode(pn, INPUT);
+      if (Debug) Serial.print(F("Set ")), Serial.print(pins[ii].name), Serial.println(F(" as INPUT"));
     }
   }
 
   for (int ii = 0, sz = setPins(Config.outputs, pins); ii < sz; ii++) {
     if (pins[ii].name[0] == 'D') {
       int pn = atoi(pins[ii].name + 1);
+      if (Debug) Serial.print(F("Set ")), Serial.print(pins[ii].name), Serial.println(F(" as OUTPUT"));
       pinMode(pn, OUTPUT);
     }
   }
 
   if (startup) {
-    pinMode(ALARM_PIN, OUTPUT);
-    digitalWrite(ALARM_PIN, HIGH);
-    resetPowerPins();
+    resetPowerPins(false);
   }
 }
 
 // readPin reads a pin value and returns it, or -1 upon error.
 // The data field will be set in the case of binary data, otherwise it will be NULL.
-// When SimulatedA0 is non-zero, this value is returned as the value for A0 one time only.
-// The following call to read A0 will therefore always return the actual value.
+// When SimulatedBat is non-zero, this value is returned as the value for BAT_PIN one time only.
+// The following call to read BAT_PIN will therefore always return the actual value.
 int readPin(Pin * pin) {
   int pn = atoi(pin->name + 1);
   pin->value = -1;
   pin->data = NULL;
   switch (pin->name[0]) {
   case 'A':
-    if (pn == 0 && SimulatedA0 != 0) {
-      if (Debug) Serial.println(F("Simulating A0"));
-      pin->value = SimulatedA0;
-      SimulatedA0 = 0;
+    if (pn == BAT_PIN && SimulatedBat != 0) {
+      if (Debug) Serial.println(F("Simulating battery voltage"));
+      pin->value = SimulatedBat;
+      SimulatedBat = 0;
     } else {
       pin->value = analogRead(pn);
     }
@@ -332,14 +389,17 @@ int readPin(Pin * pin) {
       pin->value = (*ExternalReader)(pin);
     }
     break;
+  default:
+    if (Debug) Serial.print(F("Warning: Invalid read from pin ")), Serial.println(pin->name);
+    return -1;
   }
   if (Debug) Serial.print(F("Read ")), Serial.print(pin->name), Serial.print(F("=")), Serial.println(pin->value);
   return pin->value;
 }
 
 // setAlarmTimer sets/resets the alarm timer.
-void setAlarmTimer(bool alarm) {
-  if (alarm) {
+void setAlarmTimer(int level) {
+  if (level == ALARM_LEVEL) {
     if (AlarmedTime == 0) {
       AlarmedTime = millis();
       if (Debug) Serial.println(F("Alarm timer ON"));
@@ -362,18 +422,17 @@ void writePin(Pin * pin) {
     analogWrite(pn, pin->value);
     break;
   case 'D':
-    pp = getPowerPin(pn);
-    if (pp != NULL && pp->alarm) {
+    if (pn == ALARM_PIN) {
       // Set/reset the alarm timer when writing the alarm pin.
-      setAlarmTimer(!pin->value);
+      setAlarmTimer(pin->value);
     }
     digitalWrite(pn, pin->value);
     break;
   case 'X':
     switch (pn) {
-    case xA0:
-      SimulatedA0 = pin->value;
-      if (Debug) Serial.print(F("Set simulated value for AO: ")), Serial.println(pin->value);
+    case xBat:
+      SimulatedBat = pin->value;
+      if (Debug) Serial.print(F("Set simulated battery voltage: ")), Serial.println(pin->value);
       break;
     case xPulseSuppress:
       if (pin->value == 1) {
@@ -383,7 +442,7 @@ void writePin(Pin * pin) {
     }
     break;
   default:
-    if (Debug) Serial.println(F("Warning: Invalid write"));
+    if (Debug) Serial.print(F("Warning: Invalid write to pin ")), Serial.println(pin->name);
   }
 }
 
@@ -457,6 +516,7 @@ void readConfig(Configuration* config) {
 void printConfig() {
   Serial.print(F("NetSender v")), Serial.println(VERSION);
   Serial.print(F("MAC address: ")), Serial.println(MacAddress);
+  Serial.print(F("Configuration size: ")), Serial.println(sizeof(Configuration));
   Serial.print(F("version: ")), Serial.println(Config.version);
   Serial.print(F("boot: ")), Serial.println(Config.boot);
   Serial.print(F("wifi: ")), Serial.println(Config.wifi);
@@ -483,6 +543,7 @@ void writeConfig(Configuration* config) {
   if (Debug) Serial.println(F("Wrote config")), printConfig();
 }
 
+
 // writeAlarm writes the alarm pin.
 // The continuous param controls the alarm duration:
 //   If true, the alarm duration is continuous (until canceled by an auto restart).
@@ -500,7 +561,7 @@ void writeConfig(Configuration* config) {
 void writeAlarm(bool alarm, bool continuous) {
   if (!alarm) {
     if (Debug) Serial.println(F("Cleared alarm"));
-    digitalWrite(ALARM_PIN, HIGH);
+    resetPowerPins(false);
     XPin[xAlarmed] = false;
     AlarmedTime = 0;
     return;
@@ -509,7 +570,7 @@ void writeAlarm(bool alarm, bool continuous) {
     return;
   }
   if (Debug) Serial.println(F("Set alarm"));
-  digitalWrite(ALARM_PIN, LOW);
+  resetPowerPins(true);
   XPin[xAlarms]++;
 
   if (continuous) {
@@ -517,8 +578,6 @@ void writeAlarm(bool alarm, bool continuous) {
     if (AlarmedTime == 0) {
       AlarmedTime = millis();
     }
-    digitalWrite(ALARM_PIN, LOW);
-    resetPowerPins();
     return;
   }
 
@@ -526,7 +585,7 @@ void writeAlarm(bool alarm, bool continuous) {
   if (Debug) Serial.print(F("Alarming for ")), Serial.print(Config.vars[pvAlarmPeriod]), Serial.println(F("s"));
   delay(Config.vars[pvAlarmPeriod] * 1000);
   if (Debug) Serial.println(F("Cleared temporary alarm"));
-  digitalWrite(ALARM_PIN, HIGH);
+  resetPowerPins(false);
   XPin[xAlarmed] = false;
 }
 
@@ -551,19 +610,24 @@ void restart(bootReason reason, bool alarm) {
   ESP.restart();
 }
 
-// wifiOn and wifiOff are low-level replacements for
-// WiFi.forceSleepWake() and WiFi.forceSleepBegin(). The latter
-// results in spurious watchdog timer resets in ESP82866 Arduino
-// 2.4.0, 2.5.2 (and possibly other versions.)  See
-// https://github.com/esp8266/Arduino/issues/4082.
+// wifiOn and wifiOff enable or disable WiFi functionality to conserve power.
+// NB: Calling WiFi.mode(WIFI_MODE_NULL) produces the following error: "wifi:NAN WiFi stop"
+// According to https://github.com/espressif/esp-idf/issues/12473, it can be ignored.
 void wifiOn() {
+#ifdef ESP8266
   wifi_fpm_do_wakeup();
   wifi_fpm_close();
   wifi_set_opmode(STATION_MODE);
   wifi_station_connect();
+#endif
+#ifdef ESP32
+  WiFi.mode(WIFI_STA);
+#endif
+  if (Debug) Serial.println(F("WiFi on"));
 }
 
 void wifiOff() {
+#ifdef ESP8266
   wifi_station_disconnect();
   bool stopped = false;
   for (int attempts = 0; !stopped && attempts < WIFI_ATTEMPTS; attempts++) {
@@ -578,6 +642,12 @@ void wifiOff() {
   wifi_set_sleep_type(MODEM_SLEEP_T);
   wifi_fpm_open();
   wifi_fpm_do_sleep(0xFFFFFFF);
+#endif
+  WiFi.mode(WIFI_MODE_NULL);
+  delay(WIFI_DELAY);
+#ifdef ESP32
+#endif
+  if (Debug) Serial.println(F("WiFi off"));
 }
 
 // wifiControl turns the WiFi on and off, returning true on success,
@@ -591,20 +661,12 @@ bool wifiControl(bool on) {
       return true; // Nothing to do.
     }
     wifiOn();
-    delay(WIFI_DELAY);
     if (!WiFi.mode(WIFI_STA)) {
       Serial.println(F("Warning: WiFi not starting"));
       return false;
     }
-    if (Debug) Serial.println(F("WiFi on"));
   } else {
-    if (!WiFi.mode(WIFI_STA)) {
-      return true;
-    }
-    if (WiFi.status() == WL_CONNECTED) {
-      WiFi.disconnect();
-      delay(WIFI_DELAY);
-    }
+    WiFi.disconnect();
     for (int attempts = 0; WiFi.status() == WL_CONNECTED && attempts < WIFI_ATTEMPTS; attempts++) {
       delay(WIFI_DELAY);
     }
@@ -613,8 +675,6 @@ bool wifiControl(bool on) {
       restart(bootWiFi, true);
     }
     wifiOff();
-    delay(WIFI_DELAY);
-    if (Debug) Serial.println(F("WiFi off"));
   }
   return true;
 }
@@ -634,30 +694,23 @@ bool wifiConnect(const char * wifi) {
   } else {
     *key++ = '\0';
   }
-  if (WiFi.status() == WL_CONNECTED) {
-    if (strcmp(WiFi.SSID().c_str(), ssid) == 0) {
-      return true;
-    }
-    WiFi.disconnect();
-  }
 
   if (Debug) Serial.print(F("Requesting DHCP from ")), Serial.println(wifi);
   WiFi.begin(ssid, key);
   delay(WIFI_DELAY);
  
-  // WiFi.waitForConnectResult can end up in an infinite loop, so don't use it!
   // NB: connecting can take several seconds, so ensure WIFI_ATTEMPTS x WIFI_DELAY is at least 5000ms.
-  for (int attempts = 0; WiFi.status() != WL_CONNECTED && attempts < WIFI_ATTEMPTS; attempts++) {
+  for (int attempts = 0; attempts < WIFI_ATTEMPTS; attempts++) {
+    if (WiFi.status() == WL_CONNECTED) {
+      LocalAddress = WiFi.localIP();
+      if (Debug) Serial.print(F("Obtained DHCP IP address ")), Serial.println(LocalAddress);
+      return true;
+    }
     delay(WIFI_DELAY);
   }
-  if (WiFi.status() != WL_CONNECTED) {
-    if (Debug) Serial.println(F("Failed to connect to WiFi"));
-    return false;
-  }
 
-  LocalAddress = WiFi.localIP();
-  if (Debug) Serial.print(F("Obtained DHCP IP address ")), Serial.println(LocalAddress);
-  return true;
+  if (Debug) Serial.println(F("Failed to connect to WiFi"));
+  return false;
 }
 
 // wifiBegin attempts to begin a WiFi session, first, using the
@@ -700,19 +753,20 @@ bool httpRequest(String url, String body, String& reply) {
     url = http.header("Location");
     if (Debug) Serial.print(F("Redirecting to: ")), Serial.println(url);
     http.end();
+    client.stop();
     return httpRequest(url, body, reply); // Redirect to the new location.
   }
 
-  if (status == httpOK) {
+  bool ok = (status == httpOK);
+  if (ok) {
     reply = http.getString();
     if (Debug) Serial.print(F("Reply: ")), Serial.println(reply);
-    http.end();
-    return true;
   } else {
     if (Debug) Serial.print(F("Warning: HTTP request failed with status: ")), Serial.println(status);
-    http.end();
-    return false;
   }
+  http.end();
+  client.stop();
+  return ok;
 }
 
 // Issue a single request, writing polled values to 'inputs' and actuated values to 'outputs'.
@@ -796,7 +850,9 @@ bool request(RequestType req, Pin * inputs, Pin * outputs, bool * reconfig, Stri
   }
 
   if (extractJson(reply, "rc", param)) {
-    switch (param.toInt()) {
+    int rc = param.toInt();
+    if (Debug) Serial.print(F("rc=")), Serial.println(rc);
+    switch (rc) {
     case rcOK:
       break;
     case rcUpdate:
@@ -810,7 +866,7 @@ bool request(RequestType req, Pin * inputs, Pin * outputs, bool * reconfig, Stri
       if (Debug) Serial.println(F("Received reboot request."));
       if (Configured) {
         // Kill the power too.
-        resetPowerPins();
+        resetPowerPins(false);
         restart(bootNormal, false);
       } // else ignore reboot request unless configured
       break;
@@ -835,6 +891,7 @@ bool request(RequestType req, Pin * inputs, Pin * outputs, bool * reconfig, Stri
 
   if (extractJson(reply, "vs", param)) {
     int vs = param.toInt();
+    if (Debug) Serial.print(F("vs=")), Serial.println(vs);
     if (vs != VarSum) {
       if (Debug) Serial.println(F("Varsum changed"));
     }
@@ -990,7 +1047,9 @@ void init(void) {
   WiFi.mode(WIFI_STA);
   Serial.begin(115200);
   pinMode(LED_PIN, OUTPUT);
+#ifdef ESP8266
   digitalWrite(LED_PIN, HIGH);
+#endif
   delay(2000);
 
   // Get Config.
@@ -1001,8 +1060,6 @@ void init(void) {
 
   // Initialize GPIO pins, including power pins.
   initPins(true);
-  // Reset alarm.
-  writeAlarm(false, true);
 
   // Save the formatted MAC address.
   byte mac[6];
@@ -1022,6 +1079,7 @@ bool pause(bool ok, unsigned long pulsed, long * lag) {
     return ok;
   }
 
+  wifiControl(false);
   unsigned long now = millis();
   long remaining = Config.actPeriod * 1000L - pulsed;
   *lag += (now - Time - pulsed);
@@ -1121,10 +1179,13 @@ bool run(int* varsum) {
 
   // Check voltage if we have an alarm voltage.
   if (Config.vars[pvAlarmVoltage] > 0) {
-    Pin pin = { "A0" };
-    if (Debug) Serial.println(F("Checking voltage"));
-    XPin[xA0] = readPin(&pin);
-    if (XPin[xA0] < Config.vars[pvAlarmVoltage]) {
+    Pin pin;
+    pin.name[0] = 'A';
+    pin.name[1] = '0'+BAT_PIN;
+    pin.name[2] = '\0';
+    if (Debug) Serial.println(F("Checking battery voltage"));
+    XPin[xBat] = readPin(&pin);
+    if (XPin[xBat] < Config.vars[pvAlarmVoltage]) {
       if (!XPin[xAlarmed]) {
         // low voltage; raise the alarm and turn off WiFi!
         if (Debug) Serial.println(F("Low voltage alarm!"));
@@ -1135,17 +1196,17 @@ bool run(int* varsum) {
       return pause(false, pulsed, &lag);
     }
     if (XPin[xAlarmed]) {
-      if (XPin[xA0] < Config.vars[pvAlarmRecoveryVoltage]) {
+      if (XPin[xBat] < Config.vars[pvAlarmRecoveryVoltage]) {
         return pause(false, pulsed, &lag);
       }
       if (Debug) Serial.println(F("Low voltage alarm cleared"));
       writeAlarm(false, true);
     }
-    if (XPin[xA0] > Config.vars[pvPeakVoltage]) {
+    if (XPin[xBat] > Config.vars[pvPeakVoltage]) {
       if (Debug) Serial.println(F("Warning: High voltage"));
     }
   } else {
-    XPin[xA0] = -1;
+    XPin[xBat] = -1;
     if (Debug) Serial.println(F("Skipped voltage check"));
   }
 
@@ -1165,7 +1226,6 @@ bool run(int* varsum) {
     } else {
       cyclePin(LED_PIN, 3, false);
     }
-    wifiControl(false); // No-op if WiFi is not on.
     return pause(false, pulsed, &lag);
   }
   
@@ -1174,7 +1234,6 @@ bool run(int* varsum) {
   //   (2) we receive a update code
   if (Config.inputs[0] == '\0' && Config.outputs[0] == '\0') {
     if (!config()) {
-      wifiControl(false);
       return pause(false, pulsed, &lag);
     }
   }
@@ -1183,7 +1242,6 @@ bool run(int* varsum) {
   if (Config.inputs[0] != '\0') {
     setPins(Config.outputs, outputs);
     if (!request(RequestPoll, inputs, outputs, &reconfig, reply)) {
-      wifiControl(false);
       return pause(false, pulsed, &lag);
     }
   }
@@ -1192,19 +1250,16 @@ bool run(int* varsum) {
   if (Config.inputs[0] == '\0' && Config.outputs[0] != '\0') {
     setPins(Config.outputs, outputs);
     if (!request(RequestAct, NULL, outputs, &reconfig, reply)) {
-      wifiControl(false);
       return pause(false, pulsed, &lag);
     }
   }
 
   if (reconfig && !config()) {
-    wifiControl(false);
     return pause(false, pulsed, &lag);
   }
 
   if (*varsum != VarSum) {
     if (!getVars(vars, &changed)) {
-      wifiControl(false);
       return pause(false, pulsed, &lag);
     }
     if (changed) {
@@ -1213,8 +1268,6 @@ bool run(int* varsum) {
     }
     *varsum = VarSum;
   }
-
-  wifiControl(false);
 
   // Adjust for pulse timing inaccuracy and network time.
   pause(true, pulsed, &lag);

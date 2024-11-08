@@ -77,6 +77,8 @@ public:
 #define STATION_MODE 0
 #define WL_CONNECTED 1
 #define WIFI_STA 2
+#define WIFI_MODE_NULL 0
+#define WIFI_MODE_STA 1
 
 class WiFiClient {
 public:
