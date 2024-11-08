@@ -35,7 +35,7 @@ namespace NetSender {
 #define DKEY_SIZE              20
 #define RESERVED_SIZE          48
 #endif
-#if defined ESP32 || defined LINUX
+#if defined ESP32 || defined __linux__
 #define VERSION                200
 #define MAX_PINS               20
 #define DKEY_SIZE              32

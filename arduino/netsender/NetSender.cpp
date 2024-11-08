@@ -26,8 +26,6 @@
 #include <string.h>
 #include <ctype.h>
 
-#define ESP32
-
 #ifdef ESP8266
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
@@ -39,7 +37,7 @@
 #include <HTTPClient.h>
 #include <EEPROM.h>
 #endif
-#ifdef LINUX
+#ifdef __linux__
 #include "nonarduino.h"
 #endif
 
@@ -55,7 +53,7 @@ namespace NetSender {
 #define BAT_PIN                0    // Analog pin that measures battery voltage.
 #define NUM_RELAYS             4    // Number of relays.
 #endif
-#if defined ESP32 || defined LINUX
+#if defined ESP32 || defined __linux__
 #define ALARM_PIN              5    // GPIO pin indicating an alarm. Controls the red LED.
 #define ALARM_LEVEL            HIGH // Level indicating an alarm state.
 #define LED_PIN                19   // GPIO pin corresponding to nav light.
@@ -172,7 +170,7 @@ PowerPin PowerPins[] = {
   {15, "Power3", false},
 };
 #endif
-#if defined ESP32 || defined LINUX
+#if defined ESP32 || defined __linux__
 PowerPin PowerPins[] = {
   {18, "Power0", true},
   {32, "Power1", false},
