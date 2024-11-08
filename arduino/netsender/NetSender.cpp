@@ -755,7 +755,7 @@ bool httpRequest(String url, String body, String& reply) {
     return httpRequest(url, body, reply); // Redirect to the new location.
   }
 
-  bool ok = (status == httpOK);
+  auto ok = (status == httpOK);
   if (ok) {
     reply = http.getString();
     if (Debug) Serial.print(F("Reply: ")), Serial.println(reply);
