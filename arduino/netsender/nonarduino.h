@@ -1,6 +1,7 @@
-// Stub for compiling without Arduino.
-// Add an include to this file, comment out Arduino and ESP include files then run:
+// Stub for compiling without Arduino on Linux.
 // gcc -fpermissive -fsyntax-only -isystem . NetSender.cpp
+
+#ifdef __linux__
 
 #include <stdlib.h>
 #include <limits.h>
@@ -149,3 +150,5 @@ SerialType Serial;
 WiFiClient WiFi;
 ESPType ESP;
 EEPROMType EEPROM;
+
+#endif
