@@ -714,7 +714,7 @@ bool wifiConnect(const char * wifi) {
 // wifiBegin attempts to begin a WiFi session, first, using the
 // configured hotspot and, second, using the default hotspot.
 bool wifiBegin() {
-  bool ok = wifiControl(true);
+  auto ok = wifiControl(true);
   if (ok) {
     ok = wifiConnect(Config.wifi);
     if (!ok && strcmp(Config.wifi, DEFAULT_WIFI) != 0) {
@@ -731,7 +731,7 @@ bool httpRequest(String url, String body, String& reply) {
   HTTPClient http;
   WiFiClient client;
 
-  bool get = body.length() == 0;
+  auto get = (body.length() == 0);
   if (Debug) Serial.print(get ? F("GET ") : F("POST ")), Serial.println(url);
   http.setTimeout(HTTP_TIMEOUT);
   http.begin(client, url);
@@ -848,7 +848,7 @@ bool request(RequestType req, Pin * inputs, Pin * outputs, bool * reconfig, Stri
   }
 
   if (extractJson(reply, "rc", param)) {
-    int rc = param.toInt();
+    auto rc = param.toInt();
     if (Debug) Serial.print(F("rc=")), Serial.println(rc);
     switch (rc) {
     case rcOK:
@@ -888,7 +888,7 @@ bool request(RequestType req, Pin * inputs, Pin * outputs, bool * reconfig, Stri
   }
 
   if (extractJson(reply, "vs", param)) {
-    int vs = param.toInt();
+    auto vs = param.toInt();
     if (Debug) Serial.print(F("vs=")), Serial.println(vs);
     if (vs != VarSum) {
       if (Debug) Serial.println(F("Varsum changed"));
@@ -1175,7 +1175,7 @@ bool run(int* varsum) {
   }
   XPin[xPulseSuppress] = 0;
 
-  // Check voltage if we have an alarm voltage.
+  // Check battery voltage if we have an alarm voltage.
   if (Config.vars[pvAlarmVoltage] > 0) {
     Pin pin;
     pin.name[0] = 'A';
