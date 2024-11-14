@@ -94,7 +94,6 @@ extern Configuration Config;
 extern ReaderFunc ExternalReader;
 extern ReaderFunc BinaryReader;
 extern int VarSum;
-extern bool Debug;
 
 // init should be called from setup once.
 // run should be called from loop until it returns true, e.g., 
