@@ -25,6 +25,7 @@
 #include <limits.h>
 #include <string.h>
 #include <ctype.h>
+#include <cstdarg>
 
 #ifdef ESP8266
 #include <ESP8266WiFi.h>
@@ -51,15 +52,14 @@ namespace NetSender {
 #define ALARM_LEVEL            LOW  // Level indicating an alarm state.
 #define LED_PIN                2    // GPIO pin corresponding to blue LED and nav light.
 #define BAT_PIN                0    // Analog pin that measures battery voltage.
-#define NUM_RELAYS             4    // Number of relays.
 #endif
 #if defined ESP32 || defined __linux__
 #define ALARM_PIN              5    // GPIO pin indicating an alarm. Controls the red LED.
 #define ALARM_LEVEL            HIGH // Level indicating an alarm state.
 #define LED_PIN                19   // GPIO pin corresponding to nav light.
 #define BAT_PIN                4    // Analog pin that measures battery voltage.
-#define NUM_RELAYS             5    // Number of relays.
 #endif
+#define NUM_RELAYS             4    // Number of relays.
 
 // Default values.
 #define PEAK_VOLTAGE           845  // Default peak voltage, approximately 25.6V.
@@ -107,6 +107,7 @@ enum rcCode {
 // Persistent variables (stored in EEPROM as part of configuration).
 // NB: Keep indexes in sync with names.
 enum pvIndex {
+  pvLogLevel,
   pvPulses,
   pvPulseWidth,
   pvPulseDutyCycle,
@@ -120,6 +121,7 @@ enum pvIndex {
 };
 
 const char* PvNames[] = {
+  "LogLevel",
   "Pulses",
   "PulseWidth",
   "PulseDutyCycle",
@@ -176,19 +178,28 @@ PowerPin PowerPins[] = {
   {32, "Power1", false},
   {33, "Power2", false},
   {25, "Power3", false},
-  {13, "Power4", false},
 };
 #endif
 
 // Variable types, which include both persistent vars and vars associated with power pins. PulseSuppress is included for convenience.
-const char* VarTypes = "{\"Pulses\":\"uint\", \"PulseWidth\":\"uint\", \"PulseDutyCycle\":\"uint\", \"PulseCycle\":\"uint\", \"AutoRestart\":\"uint\", \"AlarmPeriod\":\"uint\", \"AlarmNetwork\":\"uint\", \"AlarmVoltage\":\"uint\", \"AlarmRecoveryVoltage\":\"uint\", \"PeakVoltage\":\"uint\", \"Power0\":\"bool\", \"Power1\":\"bool\", \"Power2\":\"bool\", \"Power3\":\"bool\", \"PulseSuppress\":\"bool\"}";
+const char* VarTypes = "{\"LogLevel\":\"uint\", \"Pulses\":\"uint\", \"PulseWidth\":\"uint\", \"PulseDutyCycle\":\"uint\", \"PulseCycle\":\"uint\", \"AutoRestart\":\"uint\", \"AlarmPeriod\":\"uint\", \"AlarmNetwork\":\"uint\", \"AlarmVoltage\":\"uint\", \"AlarmRecoveryVoltage\":\"uint\", \"PeakVoltage\":\"uint\", \"Power0\":\"bool\", \"Power1\":\"bool\", \"Power2\":\"bool\", \"Power3\":\"bool\", \"PulseSuppress\":\"bool\"}";
+
+typedef enum logLevel {
+  logNone    = 0,
+  logError   = 1,
+  logInfo    = 2,
+  logWarning = 3,
+  logDebug   = 4,
+  logMax     = 5
+} LogLevel;
+
+const char* logLevels[] = {"", "Error", "Warning", "Info", "Debug"};
 
 // Exported globals.
 Configuration Config;
 ReaderFunc ExternalReader = NULL;
 ReaderFunc BinaryReader = NULL;
 int VarSum = 0;
-bool Debug = false;
 
 // Other globals.
 static int XPin[xMax] = {100000, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0, 0, 0};
@@ -204,6 +215,19 @@ static int SimulatedBat = 0;
 void restart(bootReason, bool);
 
 // Utilities:
+
+// log prints a message if the given level is less than or equal to the LogLevel var level.
+void log(LogLevel level, const char* format, ...) {
+  if (level > Config.vars[pvLogLevel] || level < logNone) {
+    return;
+  }
+  printf("%s: ", logLevels[level]);
+  va_list args;
+  va_start(args, format);
+  vprintf(format, args);
+  va_end(args);
+  printf("\n");
+}
 
 // padcopy copies a string, padding with null characters
 void padCopy(char * dst, const char * src, size_t size) {
@@ -268,7 +292,7 @@ bool extractJson(String json, const char * name, String& value) {
 // longDelay is currently just a wrapper for delay, with a warning if WiFi is connected.
 void longDelay(unsigned long ms) {
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.println(F("Warning: longDelay called while WiFi is connected."));
+    log(logWarning, "longDelay called while WiFi is connected.");
   }
   delay(ms);
 }
@@ -319,13 +343,13 @@ void resetPowerPins(bool alarm) {
     }
     pinMode(PowerPins[ii].pin, OUTPUT);
     digitalWrite(PowerPins[ii].pin, level);
-    if (Debug) Serial.print(F("Set power pin: D")), Serial.print(PowerPins[ii].pin), Serial.print(F(" ")), Serial.println(fmtLevel(level));
+    log(logDebug, "Set power pin: D%d %s", PowerPins[ii].pin, fmtLevel(level));
   }
 #ifdef ESP32
   level = alarm ? ALARM_LEVEL : !ALARM_LEVEL;
   pinMode(ALARM_PIN, OUTPUT);
   digitalWrite(ALARM_PIN, level);
-  if (Debug) Serial.print(F("Set alarm pin: D")), Serial.print(ALARM_PIN), Serial.print(F(" ")), Serial.println(fmtLevel(level));
+  log(logDebug, "Set alarm pin: D%d %s", ALARM_PIN, fmtLevel(level));
 #endif
 }
 
@@ -337,14 +361,14 @@ void initPins(bool startup) {
     if (pins[ii].name[0] == 'D' || pins[ii].name[0] == 'A') {
       int pn = atoi(pins[ii].name + 1);
       pinMode(pn, INPUT);
-      if (Debug) Serial.print(F("Set ")), Serial.print(pins[ii].name), Serial.println(F(" as INPUT"));
+      log(logDebug, "Set %s as INPUT", pins[ii].name);
     }
   }
 
   for (int ii = 0, sz = setPins(Config.outputs, pins); ii < sz; ii++) {
     if (pins[ii].name[0] == 'D') {
       int pn = atoi(pins[ii].name + 1);
-      if (Debug) Serial.print(F("Set ")), Serial.print(pins[ii].name), Serial.println(F(" as OUTPUT"));
+      log(logDebug, "Set %s as OUTPUT", pins[ii].name);
       pinMode(pn, OUTPUT);
     }
   }
@@ -365,7 +389,7 @@ int readPin(Pin * pin) {
   switch (pin->name[0]) {
   case 'A':
     if (pn == BAT_PIN && SimulatedBat != 0) {
-      if (Debug) Serial.println(F("Simulating battery voltage"));
+      log(logDebug, "Simulating battery voltage");
       pin->value = SimulatedBat;
       SimulatedBat = 0;
     } else {
@@ -388,10 +412,10 @@ int readPin(Pin * pin) {
     }
     break;
   default:
-    if (Debug) Serial.print(F("Warning: Invalid read from pin ")), Serial.println(pin->name);
+    log(logWarning, "Invalid read from pin %s", pin->name);
     return -1;
   }
-  if (Debug) Serial.print(F("Read ")), Serial.print(pin->name), Serial.print(F("=")), Serial.println(pin->value);
+  log(logDebug, "Read %s=%d", pin->name, pin->value);
   return pin->value;
 }
 
@@ -400,12 +424,12 @@ void setAlarmTimer(int level) {
   if (level == ALARM_LEVEL) {
     if (AlarmedTime == 0) {
       AlarmedTime = millis();
-      if (Debug) Serial.println(F("Alarm timer ON"));
+      log(logDebug, "Alarm timer ON");
     } else {
-      if (Debug) Serial.println(F("Alarm timer continuing"));
+      log(logDebug, "Alarm timer continuing");
     }
   } else {
-    if (Debug) Serial.println(F("Alarm timer OFF"));
+    log(logDebug, "Alarm timer OFF");
     AlarmedTime = 0;
   }
 }
@@ -414,7 +438,7 @@ void setAlarmTimer(int level) {
 void writePin(Pin * pin) {
   int pn = atoi(pin->name + 1);
   PowerPin * pp;
-  if (Debug) Serial.print(F("Write ")), Serial.print(pin->name), Serial.print(F("=")), Serial.println(pin->value);
+  log(logDebug, "Write %s=%d", pin->name, pin->value);
   switch (pin->name[0]) {
   case 'A':
     analogWrite(pn, pin->value);
@@ -430,7 +454,7 @@ void writePin(Pin * pin) {
     switch (pn) {
     case xBat:
       SimulatedBat = pin->value;
-      if (Debug) Serial.print(F("Set simulated battery voltage: ")), Serial.println(pin->value);
+      log(logDebug, "Set simulated battery voltage: %d", pin->value);
       break;
     case xPulseSuppress:
       if (pin->value == 1) {
@@ -440,7 +464,7 @@ void writePin(Pin * pin) {
     }
     break;
   default:
-    if (Debug) Serial.print(F("Warning: Invalid write to pin ")), Serial.println(pin->name);
+    log(logWarning, "Invalid write to pin %s", pin->name);
   }
 }
 
@@ -455,12 +479,10 @@ void pulsePin(int pin, int pulses, int width, int dutyCycle=50) {
   if (pulses <= 0) return;
   if (width <= 0 || pulses * width > Config.monPeriod) return;
   if (dutyCycle < 0 || dutyCycle > 200 ) return;
-  if (Debug) {
-    if (XPin[xPulseSuppress]) {
-      Serial.print(F("Pulse suppressed: ")), Serial.print(pulses * width), Serial.println(F("s"));
-    } else {
-      Serial.print(F("Pulsing ")), Serial.print(pulses), Serial.print(F(",")), Serial.print(width), Serial.print(F(",")), Serial.println(dutyCycle);
-    }
+  if (XPin[xPulseSuppress]) {
+    log(logDebug, "Pulse suppressed: %ds", pulses * width);
+  } else {
+    log(logDebug, "Pulsing %d,%d,%ds", pulses, width, dutyCycle);
   }
   if (dutyCycle == 0) {
     dutyCycle = 50;
@@ -501,7 +523,7 @@ void readConfig(Configuration* config) {
     }
   }
   if (config->version/10 != VERSION/10) {
-    if (Debug) Serial.print(F("Clearing config with version ")), Serial.println(config->version);
+    log(logDebug, "Clearing config with version %d", config->version);
     memset((unsigned char *)config, 0, sizeof(Configuration));
     config->version = VERSION;
   }
@@ -532,15 +554,15 @@ void printConfig() {
 // writeConfig writes the configuration to EEPROM.
 void writeConfig(Configuration* config) {
   unsigned char *bytep = (unsigned char *)config;
-  if (Debug) Serial.println(F("Writing config"));
+  log(logDebug, "Writing config");
   EEPROM.begin(sizeof(Configuration));
   for (int ii = 0; ii < sizeof(Configuration); ii++) {
     EEPROM.write(ii, *bytep++);
   }
   EEPROM.commit();
-  if (Debug) Serial.println(F("Wrote config")), printConfig();
+  log(logDebug, "Wrote config");
+  printConfig();
 }
-
 
 // writeAlarm writes the alarm pin.
 // The continuous param controls the alarm duration:
@@ -558,7 +580,7 @@ void writeConfig(Configuration* config) {
 //   AlarmedTime is set to the alarm start time.
 void writeAlarm(bool alarm, bool continuous) {
   if (!alarm) {
-    if (Debug) Serial.println(F("Cleared alarm"));
+    log(logDebug, "Cleared alarm");
     resetPowerPins(false);
     XPin[xAlarmed] = false;
     AlarmedTime = 0;
@@ -567,7 +589,7 @@ void writeAlarm(bool alarm, bool continuous) {
   if (Config.vars[pvAlarmNetwork] == 0 && Config.vars[pvAlarmVoltage] == 0) {
     return;
   }
-  if (Debug) Serial.println(F("Set alarm"));
+  log(logDebug, "Set alarm");
   resetPowerPins(true);
   XPin[xAlarms]++;
 
@@ -580,9 +602,9 @@ void writeAlarm(bool alarm, bool continuous) {
   }
 
   // Alarm is temporary.
-  if (Debug) Serial.print(F("Alarming for ")), Serial.print(Config.vars[pvAlarmPeriod]), Serial.println(F("s"));
+  log(logDebug, "Alarming for %ds", Config.vars[pvAlarmPeriod]);
   delay(Config.vars[pvAlarmPeriod] * 1000);
-  if (Debug) Serial.println(F("Cleared temporary alarm"));
+  log(logDebug, "Cleared temporary alarm");
   resetPowerPins(false);
   XPin[xAlarmed] = false;
 }
@@ -591,12 +613,12 @@ void writeAlarm(bool alarm, bool continuous) {
 // alarm before restarting when alarm is true.
 // NB: For restart purposes, bootClear is treated like bootAlarm.
 void restart(bootReason reason, bool alarm) {
-  if (Debug) Serial.print(F("Restarting (")), Serial.print(reason), Serial.print(F(",")), Serial.print(alarm), Serial.println(F(")"));
+  log(logInfo, "Restarting (%d,%d)", reason, alarm);
   if (Config.boot == bootClear) {
     Config.boot = bootAlarm;
   }
   if (reason != Config.boot) {
-    if (Debug) Serial.print(F("Writing boot reason: ")), Serial.println(reason);
+    log(logDebug, "Writing boot reason: %d", reason);
     Config.boot = reason;
     writeConfig(&Config);
   }
@@ -621,7 +643,7 @@ void wifiOn() {
 #ifdef ESP32
   WiFi.mode(WIFI_STA);
 #endif
-  if (Debug) Serial.println(F("WiFi on"));
+  log(logDebug, "WiFi on");
 }
 
 void wifiOff() {
@@ -633,7 +655,7 @@ void wifiOff() {
     delay(WIFI_DELAY);
   }
   if (!stopped) {
-    Serial.println("Warning: DHCP not stopping.");
+    log(logError, "DHCP not stopping.");
     restart(bootWiFi, true);
   }
   wifi_set_opmode(NULL_MODE);
@@ -645,7 +667,7 @@ void wifiOff() {
   delay(WIFI_DELAY);
 #ifdef ESP32
 #endif
-  if (Debug) Serial.println(F("WiFi off"));
+  log(logDebug, "WiFi off");
 }
 
 // wifiControl turns the WiFi on and off, returning true on success,
@@ -660,7 +682,7 @@ bool wifiControl(bool on) {
     }
     wifiOn();
     if (!WiFi.mode(WIFI_STA)) {
-      Serial.println(F("Warning: WiFi not starting"));
+      log(logError, "WiFi not starting");
       return false;
     }
   } else {
@@ -669,7 +691,7 @@ bool wifiControl(bool on) {
       delay(WIFI_DELAY);
     }
     if (WiFi.status() == WL_CONNECTED) {
-      Serial.println(F("Warning: WiFi not disconnecting"));
+      log(logError, "WiFi not disconnecting");
       restart(bootWiFi, true);
     }
     wifiOff();
@@ -693,7 +715,7 @@ bool wifiConnect(const char * wifi) {
     *key++ = '\0';
   }
 
-  if (Debug) Serial.print(F("Requesting DHCP from ")), Serial.println(wifi);
+  log(logDebug, "Requesting DHCP from %s", wifi);
   WiFi.begin(ssid, key);
   delay(WIFI_DELAY);
  
@@ -701,13 +723,13 @@ bool wifiConnect(const char * wifi) {
   for (int attempts = 0; attempts < WIFI_ATTEMPTS; attempts++) {
     if (WiFi.status() == WL_CONNECTED) {
       LocalAddress = WiFi.localIP();
-      if (Debug) Serial.print(F("Obtained DHCP IP address ")), Serial.println(LocalAddress);
+      log(logDebug, "Obtained DHCP IP Address %d.%d.%d.%d", LocalAddress[0], LocalAddress[1], LocalAddress[2], LocalAddress[3]);
       return true;
     }
     delay(WIFI_DELAY);
   }
 
-  if (Debug) Serial.println(F("Failed to connect to WiFi"));
+  log(logDebug, "Failed to connect to WiFi");
   return false;
 }
 
@@ -732,7 +754,7 @@ bool httpRequest(String url, String body, String& reply) {
   WiFiClient client;
 
   auto get = (body.length() == 0);
-  if (Debug) Serial.print(get ? F("GET ") : F("POST ")), Serial.println(url);
+  log(logDebug, "%s %s", get ? "GET " : "POST ", url.c_str());
   http.setTimeout(HTTP_TIMEOUT);
   http.begin(client, url);
   const char* locationHeader[] = {"Location"};
@@ -749,7 +771,7 @@ bool httpRequest(String url, String body, String& reply) {
   case httpTemporaryRedirect:
   case httpPermanentRedirect:
     url = http.header("Location");
-    if (Debug) Serial.print(F("Redirecting to: ")), Serial.println(url);
+    log(logDebug, "Redirecting to: %s", url.c_str());
     http.end();
     client.stop();
     return httpRequest(url, body, reply); // Redirect to the new location.
@@ -758,9 +780,9 @@ bool httpRequest(String url, String body, String& reply) {
   auto ok = (status == httpOK);
   if (ok) {
     reply = http.getString();
-    if (Debug) Serial.print(F("Reply: ")), Serial.println(reply);
+    log(logDebug, "Reply: %s", reply.c_str());
   } else {
-    if (Debug) Serial.print(F("Warning: HTTP request failed with status: ")), Serial.println(status);
+    log(logWarning, "HTTP request failed with status: %d", status);
   }
   http.end();
   client.stop();
@@ -801,7 +823,7 @@ bool request(RequestType req, Pin * inputs, Pin * outputs, bool * reconfig, Stri
     for (int ii = 0; ii < MAX_PINS && inputs[ii].name[0] != '\0'; ii++) {
       if (inputs[ii].value < 0 && strcmp(inputs[ii].name, "X10") != 0) {
         // Omit negative scalars (except X10) or missing/partial binary data.
-        if (Debug) Serial.print(F("Warning: Not sending ")), Serial.println(inputs[ii].name);
+        log(logDebug, "Not sending negative value for %s", inputs[ii].name);
         continue;
       }
       sprintf(path + strlen(path), "&%s=%d", inputs[ii].name, inputs[ii].value);
@@ -819,7 +841,7 @@ bool request(RequestType req, Pin * inputs, Pin * outputs, bool * reconfig, Stri
     NetworkFailures = 0;
   } else {
     NetworkFailures++;
-    if (Debug) Serial.print(F("Network failures: ")), Serial.println(NetworkFailures);
+    log(logDebug, "Network failures: %d", NetworkFailures);
     if (Config.vars[pvAlarmNetwork] > 0 && NetworkFailures >= Config.vars[pvAlarmNetwork]) {
       // Too many network failures; raise the alarm!
       writeAlarm(true, false);
@@ -829,7 +851,7 @@ bool request(RequestType req, Pin * inputs, Pin * outputs, bool * reconfig, Stri
   }
 
   if (!reply.startsWith("{")) {
-    if (Debug) Serial.println(F("Warning: Malformed response"));
+    log(logWarning, "Malformed response");
     return false;
   }
 
@@ -842,26 +864,24 @@ bool request(RequestType req, Pin * inputs, Pin * outputs, bool * reconfig, Stri
         writePin(&outputs[ii]);
       } else {
         outputs[ii].value = -1;
-        if (Debug) Serial.print(F("Warning: Missing value for output pin ")), Serial.println(outputs[ii].name);
+        log(logWarning, "Missing value for output pin %s", outputs[ii].name);
       }
     }
   }
 
   if (extractJson(reply, "rc", param)) {
     auto rc = param.toInt();
-    if (Debug) Serial.print(F("rc=")), Serial.println(rc);
+    log(logDebug, "rc=%d", rc);
     switch (rc) {
     case rcOK:
       break;
     case rcUpdate:
-      if (Debug) {
-        Serial.println(F("Received update request."));
-      }
+      log(logDebug, "Received update request.");
       *reconfig = true;
       Configured = false;
       break;
     case rcReboot:
-      if (Debug) Serial.println(F("Received reboot request."));
+      log(logDebug, "Received reboot request.");
       if (Configured) {
         // Kill the power too.
         resetPowerPins(false);
@@ -869,13 +889,10 @@ bool request(RequestType req, Pin * inputs, Pin * outputs, bool * reconfig, Stri
       } // else ignore reboot request unless configured
       break;
     case rcDebug:
-      if (!Debug) {
-        Serial.println(F("Debug mode on."));
-        Debug = true;
-      }
+      // Debugging is now controlled via LogLevel.
       break;
     case rcAlarm:
-      if (Debug) Serial.println(F("Received alarm request."));
+      log(logDebug, "Received alarm request.");
       if (Configured && Config.vars[pvAlarmPeriod] > 0) {
         writeAlarm(true, false);
         *reconfig = true;
@@ -889,16 +906,16 @@ bool request(RequestType req, Pin * inputs, Pin * outputs, bool * reconfig, Stri
 
   if (extractJson(reply, "vs", param)) {
     auto vs = param.toInt();
-    if (Debug) Serial.print(F("vs=")), Serial.println(vs);
+    log(logDebug, "vs=%d", vs);
     if (vs != VarSum) {
-      if (Debug) Serial.println(F("Varsum changed"));
+      log(logDebug, "Varsum changed");
     }
     VarSum = vs;
   }
 
   if (extractJson(reply, "er", param)) {
     // we let the caller deal with errors
-    if (Debug) Serial.print(F("Error: ")), Serial.println(param);
+    log(logDebug, "er=%s", param.c_str());
   }
 
   return true;
@@ -923,36 +940,36 @@ bool config() {
     cyclePin(LED_PIN, 2, false);
     return false;
   } 
-  if (Debug) Serial.print(F("Config response: ")), Serial.println(reply);
+  log(logDebug, "Config response: %s", reply.c_str());
 
   if (extractJson(reply, "mp", param) && param.toInt() != Config.monPeriod) {
     Config.monPeriod = param.toInt();
-    if (Debug) Serial.print(F("Mon. period changed: ")), Serial.println(Config.monPeriod);
+    log(logDebug, "Mon. period changed: %d", Config.monPeriod);
     changed = true;
   }
   if (extractJson(reply, "ap", param) && param.toInt() != Config.actPeriod) {
     Config.actPeriod = param.toInt();
-    if (Debug) Serial.print(F("Act. period changed: ")), Serial.println(Config.actPeriod);
+    log(logDebug, "Act. period changed: %d", Config.actPeriod);
     changed = true;
   }
   if (extractJson(reply, "wi", param) && param != Config.wifi) {
     padCopy(Config.wifi, param.c_str(), WIFI_SIZE);
-    if (Debug) Serial.print(F("Wifi changed: ")), Serial.println(Config.wifi);
+    log(logDebug, "Wifi changed: %s", Config.wifi);
     changed = true;
   }
   if (extractJson(reply, "dk", param) && param != Config.dkey) {
     padCopy(Config.dkey, param.c_str(), DKEY_SIZE);
-    if (Debug) Serial.print(F("Dkey changed: ")), Serial.println(Config.dkey);
+    log(logDebug, "Dkey changed: %s", Config.dkey);
     changed = true;
   }
   if (extractJson(reply, "ip", param) && param != Config.inputs) {
     padCopy(Config.inputs, param.c_str(), IO_SIZE);
-    if (Debug) Serial.print(F("Inputs changed: ")), Serial.println(Config.inputs);
+    log(logDebug, "Inputs changed: %s", Config.inputs);
     changed = true;
   }
   if (extractJson(reply, "op", param) && param != Config.outputs) {
     padCopy(Config.outputs, param.c_str(), IO_SIZE);
-    if (Debug) Serial.print(F("Outputs changed: ")), Serial.println(Config.outputs);
+    log(logDebug, "Outputs changed: %s", Config.outputs);
     changed = true;
   }
 
@@ -978,7 +995,7 @@ bool getVars(int vars[MAX_VARS], bool* changed) {
     return false;
   }
   bool hasId = extractJson(reply, "id", id);
-  if (hasId && Debug) Serial.print(F("id=")), Serial.println(id);
+  if (hasId) log(logDebug, "id=%s", id.c_str());
 
   for  (int ii = 0; ii < MAX_VARS; ii++) {
     int val = 0;
@@ -1006,12 +1023,11 @@ bool getVars(int vars[MAX_VARS], bool* changed) {
     }
     vars[ii] = val;
 
-    if (Debug) Serial.print(PvNames[ii]), Serial.print(F("=")), Serial.print(vars[ii]);
+    log(logDebug, "%s=%d", PvNames[ii], vars[ii]);
     if (Config.vars[ii] != val) {
       *changed = true;
-      if (Debug) Serial.print(F("!=")), Serial.print(Config.vars[ii]);
+      log(logDebug, "%s=>%d", PvNames[ii], val);
      }
-     Serial.println(F(""));
   }
 
   // Clamp alarm voltages so as to not exceed the peak voltage.
@@ -1033,7 +1049,7 @@ bool getVars(int vars[MAX_VARS], bool* changed) {
 
 // write vars
 void writeVars(int vars[MAX_VARS]) {
-  if (Debug) Serial.println(F("Writing vars"));
+  log(logDebug, "Writing vars");
   memcpy(Config.vars, vars, sizeof(Config.vars));
   writeConfig(&Config);
 }
@@ -1052,6 +1068,7 @@ void init(void) {
 
   // Get Config.
   readConfig(&Config);
+
   // Get boot info.
   XPin[xBoot] = Config.boot;
   Serial.print(F("Boot reason: ")), Serial.println(Config.boot);
@@ -1072,7 +1089,7 @@ void init(void) {
 // unless we're out of time.
 bool pause(bool ok, unsigned long pulsed, long * lag) {
   if (!ok && pulsed == 0) {
-    if (Debug) Serial.print(F("Retrying in ")), Serial.print(RETRY_PERIOD), Serial.println(F("s"));
+    log(logInfo, "Retrying in %ds", RETRY_PERIOD);
     delay(RETRY_PERIOD * 1000L);
     return ok;
   }
@@ -1082,19 +1099,17 @@ bool pause(bool ok, unsigned long pulsed, long * lag) {
   long remaining = Config.actPeriod * 1000L - pulsed;
   *lag += (now - Time - pulsed);
 
-  if (Debug) {
-    Serial.print(F("Pulsed time: ")), Serial.print(pulsed), Serial.println(F("ms"));
-    Serial.print(F("Total lag: ")), Serial.print(*lag), Serial.println(F("ms"));
-    Serial.print(F("Run time: ")), Serial.print(now - Time), Serial.println(F("ms"));
-  }
+  log(logDebug, "Pulsed time: %ums", pulsed);
+  log(logDebug, "Total lag: %ldms", *lag);
+  log(logDebug, "Run time: %ulms", now - Time);
 
   if (remaining > *lag) {
     remaining -= *lag;
-    if (Debug) Serial.print(F("Pausing for ")), Serial.print(remaining), Serial.println(F("ms"));
+    log(logDebug, "Pausing for %ldms", remaining);
     longDelay(remaining);
     *lag = 0;
   } else {
-    if (Debug) Serial.println(F("Skipped pause"));
+    log(logDebug, "Skipped pause");
   }
   return ok;
 }
@@ -1118,7 +1133,7 @@ bool run(int* varsum) {
   // Measure lag to maintain accuracy between cycles.
   if (Time > 0 && now > Time) {
     lag = (long)(now - Time) - (Config.monPeriod * 1000L);
-    if (Debug) Serial.print(F("Initial lag: ")), Serial.print(lag), Serial.println(F("ms"));
+    log(logDebug, "Initial lag: %ldms", lag);
     if (lag < 0) {
       lag = 0;
     }
@@ -1132,7 +1147,7 @@ bool run(int* varsum) {
     // Attempt to refresh vars in case the recent alarm was due to operator error.
     if (wifiBegin() && getVars(vars, &changed)) {
       if (changed) {
-        if (Debug) Serial.println(F("Persistent variable(s) changed"));
+        log(logDebug, "Persistent variable(s) changed");
         writeVars(vars);
       }
       *varsum = VarSum;
@@ -1148,7 +1163,7 @@ bool run(int* varsum) {
     } else { // rolled over
       alarmed = ((0xffffffff - AlarmedTime) + now)/1000;
     }
-    if (Debug) Serial.print(F("Alarm duration: ")), Serial.print(alarmed), Serial.println(F("s"));
+    log(logDebug, "Alarm duration: %ds", alarmed);
     if (alarmed >= Config.vars[pvAutoRestart]) {
       restart(bootAlarm, false);
     }
@@ -1166,7 +1181,7 @@ bool run(int* varsum) {
     long gap = (Config.vars[pvPulseCycle] * 1000L) - (long)pulsed;
     if (gap > 0) {
       for (int spanned = 0; spanned < Config.monPeriod - Config.vars[pvPulseCycle]; spanned += Config.vars[pvPulseCycle]) {
-        if (Debug) Serial.print(F("Pulse group gap: ")), Serial.print(gap), Serial.println(F("ms"));
+        log(logDebug, "Pulse group gap: %dms", gap);
         longDelay(gap);
         pulsePin(LED_PIN, Config.vars[pvPulses], Config.vars[pvPulseWidth], Config.vars[pvPulseDutyCycle]);
         pulsed += (gap + ((unsigned long)Config.vars[pvPulses] * Config.vars[pvPulseWidth]));
@@ -1181,12 +1196,12 @@ bool run(int* varsum) {
     pin.name[0] = 'A';
     pin.name[1] = '0'+BAT_PIN;
     pin.name[2] = '\0';
-    if (Debug) Serial.println(F("Checking battery voltage"));
+    log(logDebug, "Checking battery voltage");
     XPin[xBat] = readPin(&pin);
     if (XPin[xBat] < Config.vars[pvAlarmVoltage]) {
       if (!XPin[xAlarmed]) {
         // low voltage; raise the alarm and turn off WiFi!
-        if (Debug) Serial.println(F("Low voltage alarm!"));
+        log(logWarning, "Low voltage alarm!");
         cyclePin(LED_PIN, 5, true);
         writeAlarm(true, true);
         wifiControl(false);
@@ -1197,15 +1212,15 @@ bool run(int* varsum) {
       if (XPin[xBat] < Config.vars[pvAlarmRecoveryVoltage]) {
         return pause(false, pulsed, &lag);
       }
-      if (Debug) Serial.println(F("Low voltage alarm cleared"));
+      log(logInfo, "Low voltage alarm cleared");
       writeAlarm(false, true);
     }
     if (XPin[xBat] > Config.vars[pvPeakVoltage]) {
-      if (Debug) Serial.println(F("Warning: High voltage"));
+      log(logWarning, "High voltage");
     }
   } else {
     XPin[xBat] = -1;
-    if (Debug) Serial.println(F("Skipped voltage check"));
+    log(logDebug, "Skipped voltage check");
   }
 
   // Read inputs, if any.
@@ -1261,7 +1276,7 @@ bool run(int* varsum) {
       return pause(false, pulsed, &lag);
     }
     if (changed) {
-      if (Debug) Serial.println(F("Persistent variable(s) changed"));
+      log(logDebug, "Persistent variable(s) changed");
       writeVars(vars);
     }
     *varsum = VarSum;
@@ -1271,7 +1286,7 @@ bool run(int* varsum) {
   pause(true, pulsed, &lag);
   cyclePin(LED_PIN, 1, false);
   if (Config.monPeriod == Config.actPeriod) {
-    if (Debug) Serial.println(F("Cycle complete"));
+    log(logDebug, "Cycle complete");
     return true;
   }
   
@@ -1283,7 +1298,7 @@ bool run(int* varsum) {
   }
   if (remaining > lag) {
     remaining -= lag;
-    if (Debug) Serial.print(F("Deep sleeping for ")), Serial.print(remaining), Serial.println(F("ms"));
+    log(logDebug, "Deep sleeping for %dms", remaining);
     ESP.deepSleep(remaining * 1000L);
   }
   return true;
