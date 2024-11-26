@@ -48,16 +48,19 @@ namespace NetSender {
 
 // Hardware constants.
 #ifdef ESP8266
-#define ALARM_PIN              0    // GPIO pin indicating an alarm. Controls the red LED.
+#define ALARM_PIN              0    // GPIO pin corresponding to the alarm LED (red).
 #define ALARM_LEVEL            LOW  // Level indicating an alarm state.
-#define LED_PIN                2    // GPIO pin corresponding to blue LED and nav light.
+#define NAV_PIN                2    // GPIO pin corresponding to nav light (yellow).
+#define STATUS_PIN             2    // GPIO pin corresponding to status LED (blue).
 #define BAT_PIN                0    // Analog pin that measures battery voltage.
 #endif
 #if defined ESP32 || defined __linux__
-#define ALARM_PIN              5    // GPIO pin indicating an alarm. Controls the red LED.
+#define ALARM_PIN              5    // GPIO pin corresponding to the alarm LED (red).
 #define ALARM_LEVEL            HIGH // Level indicating an alarm state.
-#define LED_PIN                19   // GPIO pin corresponding to nav light.
+#define NAV_PIN                19   // GPIO pin corresponding to nav light (yellow).
+#define STATUS_PIN             23   // GPIO pin corresponding to status LED (blue).
 #define BAT_PIN                4    // Analog pin that measures battery voltage.
+
 #endif
 #define NUM_RELAYS             4    // Number of relays.
 
@@ -82,6 +85,16 @@ enum bootReason {
   bootWiFi   = 0x01, // Reboot due to WiFi error.
   bootAlarm  = 0x02, // Alarm auto-restart.
   bootClear  = 0x03, // Alarm cleared; written when config or vars updated following an auto-restart.
+};
+
+// Status codes define how many times the status LED is flashed for the given condition.
+enum statusCode {
+  statusOK           = 1,
+  statusConfigError  = 2,
+  statusWiFiError    = 3,
+  statusConfigUpdate = 4,
+  statusVoltageAlarm = 5,
+  statusRestart      = 6,
 };
 
 enum httpStatusCode {
@@ -626,7 +639,7 @@ void restart(bootReason reason, bool alarm) {
     writeAlarm(true, true);
     delay(2000);
   }
-  cyclePin(LED_PIN, 6, true);
+  cyclePin(STATUS_PIN, statusRestart, true);
   ESP.restart();
 }
 
@@ -937,7 +950,7 @@ bool config() {
   pins[1].name[0] = '\0';
 
   if (!request(RequestConfig, pins, NULL, &reconfig, reply) || extractJson(reply, "er", param)) {
-    cyclePin(LED_PIN, 2, false);
+    cyclePin(STATUS_PIN, statusConfigError, false);
     return false;
   } 
   log(logDebug, "Config response: %s", reply.c_str());
@@ -976,7 +989,7 @@ bool config() {
   if (changed) {
     writeConfig(&Config);
     initPins(false); // NB: Don't re-initalize power pins.
-    cyclePin(LED_PIN, 4, false);
+    cyclePin(STATUS_PIN, statusConfigUpdate, false);
   }
   Configured = true;
   return true;
@@ -1060,9 +1073,11 @@ void init(void) {
   WiFi.persistent(false);
   WiFi.mode(WIFI_STA);
   Serial.begin(115200);
-  pinMode(LED_PIN, OUTPUT);
+  pinMode(ALARM_PIN, OUTPUT);
+  pinMode(NAV_PIN, OUTPUT);
+  pinMode(STATUS_PIN, OUTPUT);
 #ifdef ESP8266
-  digitalWrite(LED_PIN, HIGH);
+  digitalWrite(STATUS_PIN, HIGH);
 #endif
   delay(2000);
 
@@ -1176,14 +1191,14 @@ bool run(int* varsum) {
 
   // Pulsing happens before anything else, regardless of network connectivity.
   if (Config.vars[pvPulses] != 0 && Config.vars[pvPulseWidth] != 0) {
-    pulsePin(LED_PIN, Config.vars[pvPulses], Config.vars[pvPulseWidth], Config.vars[pvPulseDutyCycle]);
+    pulsePin(NAV_PIN, Config.vars[pvPulses], Config.vars[pvPulseWidth], Config.vars[pvPulseDutyCycle]);
     pulsed = (unsigned long)Config.vars[pvPulses] * Config.vars[pvPulseWidth] * 1000L;
     long gap = (Config.vars[pvPulseCycle] * 1000L) - (long)pulsed;
     if (gap > 0) {
       for (int spanned = 0; spanned < Config.monPeriod - Config.vars[pvPulseCycle]; spanned += Config.vars[pvPulseCycle]) {
         log(logDebug, "Pulse group gap: %dms", gap);
         longDelay(gap);
-        pulsePin(LED_PIN, Config.vars[pvPulses], Config.vars[pvPulseWidth], Config.vars[pvPulseDutyCycle]);
+        pulsePin(NAV_PIN, Config.vars[pvPulses], Config.vars[pvPulseWidth], Config.vars[pvPulseDutyCycle]);
         pulsed += (gap + ((unsigned long)Config.vars[pvPulses] * Config.vars[pvPulseWidth]));
       }
     }
@@ -1202,7 +1217,7 @@ bool run(int* varsum) {
       if (!XPin[xAlarmed]) {
         // low voltage; raise the alarm and turn off WiFi!
         log(logWarning, "Low voltage alarm!");
-        cyclePin(LED_PIN, 5, true);
+        cyclePin(STATUS_PIN, statusVoltageAlarm, true);
         writeAlarm(true, true);
         wifiControl(false);
       }
@@ -1237,7 +1252,7 @@ bool run(int* varsum) {
       writeAlarm(true, false);
       NetworkFailures = 0;
     } else {
-      cyclePin(LED_PIN, 3, false);
+      cyclePin(STATUS_PIN, statusWiFiError, false);
     }
     return pause(false, pulsed, &lag);
   }
@@ -1284,7 +1299,7 @@ bool run(int* varsum) {
 
   // Adjust for pulse timing inaccuracy and network time.
   pause(true, pulsed, &lag);
-  cyclePin(LED_PIN, 1, false);
+  cyclePin(STATUS_PIN, statusOK, false);
   if (Config.monPeriod == Config.actPeriod) {
     log(logDebug, "Cycle complete");
     return true;
