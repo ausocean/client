@@ -69,7 +69,7 @@ int tempReader(NetSender::Pin *pin) {
     return -1;
   }
   if (failures >= MAX_FAILURES) {
-    if (NetSender::Debug) Serial.println(F("Reinializing DHT and DT sensors"));
+    Serial.println(F("Reinializing DHT and DT sensors"));
     dht.begin();
     dt.begin();
     failures = 0;
