@@ -12,6 +12,7 @@ DESCRIPTION
     X50 = DHT temperature
     X51 = DHT humidity
     X60 = Dallas temperature (DS18B20, etc.)
+    X70 = TSL2951 Light Sensor
     
   Temperatures are reported in degrees Kelvin times 10. Humidity is
   reported as a percentage times 10, i.e., 482 for 48.2% A value of -1
@@ -42,6 +43,7 @@ LICENSE
 #include "DHT.h"
 #include <OneWire.h>
 #include <DallasTemperature.h>
+#include <Adafruit_TSL2591.h>
 
 
 #define MAX_FAILURES 10
@@ -49,20 +51,25 @@ LICENSE
 #define DHTPIN       12
 #define DTPIN        13
 #else
-#define DHTPIN       36
-#define DTPIN        39
+#define DHTPIN       1
+#define DTPIN        13
+#define SDA          16
+#define SCL          17
 #endif
 #define ZERO_CELSIUS 273.15 // In Kelvin.
+static constexpr auto tslMax{4294966000.0}; // Saturated max value for TSL2951.
 
 #define DHTTYPE DHT22 // external device #5 
 DHT dht(DHTPIN, DHTTYPE);
 OneWire onewire(DTPIN);
 DallasTemperature dt(&onewire); // external device #6
+static constexpr auto TSL_ID{70};
+Adafruit_TSL2591 tsl(TSL_ID);
 
 int varsum = 0;
 int failures = 0;
 
-// tempReader is the pin reader that polls either the DHT or Dallas Temperature device
+// tempReader is the pin reader that polls either the DHT, Dallas Temperature device, or Photometer.
 int tempReader(NetSender::Pin *pin) {
   pin->value = -1;
   if (pin->name[0] != 'X') {
@@ -72,10 +79,12 @@ int tempReader(NetSender::Pin *pin) {
     Serial.println(F("Reinializing DHT and DT sensors"));
     dht.begin();
     dt.begin();
+    tsl.begin();
     failures = 0;
   }
   int pn = atoi(pin->name + 1);
   float ff;
+  uint16_t lum;
   switch(pn) {
   case 50: // DHT air temperature
     ff = dht.readTemperature();
@@ -105,6 +114,14 @@ int tempReader(NetSender::Pin *pin) {
       pin->value = 10 * (ff + ZERO_CELSIUS);
       break;
     }
+  case 70: // TSL Lux
+    lum = tsl.getLuminosity(TSL2591_FULLSPECTRUM);
+    if ((lum <= 0) || isnan(lum)) {
+      failures++;
+      return -1;
+    }
+    pin->value = lum;
+    break;
   default:
     return -1; 
   }
@@ -116,6 +133,10 @@ int tempReader(NetSender::Pin *pin) {
 void setup() {
   dht.begin();
   dt.begin();
+  Wire.begin(16,17);
+  tsl.setGain(TSL2591_GAIN_LOW);
+  tsl.setTiming(TSL2591_INTEGRATIONTIME_100MS);
+  tsl.begin();
   NetSender::ExternalReader = &tempReader;
   NetSender::init();
   loop();
