@@ -53,6 +53,7 @@ namespace NetSender {
 #define NAV_PIN                2    // GPIO pin corresponding to nav light (yellow).
 #define STATUS_PIN             2    // GPIO pin corresponding to status LED (blue).
 #define BAT_PIN                0    // Analog pin that measures battery voltage.
+#define DUTY_CYCLE             150  // Duty cycle used when flashing STATUS_PIN.
 #endif
 #if defined ESP32 || defined __linux__
 #define ALARM_PIN              5    // GPIO pin corresponding to the alarm LED (red).
@@ -60,7 +61,7 @@ namespace NetSender {
 #define NAV_PIN                19   // GPIO pin corresponding to nav light (yellow).
 #define STATUS_PIN             23   // GPIO pin corresponding to status LED (blue).
 #define BAT_PIN                4    // Analog pin that measures battery voltage.
-
+#define DUTY_CYCLE             50   // Duty cycle used when flashing STATUS_PIN.
 #endif
 #define NUM_RELAYS             4    // Number of relays.
 
@@ -518,7 +519,7 @@ void pulsePin(int pin, int pulses, int width, int dutyCycle=50) {
 // cyclePin cycles a digital pin on and off, unless in pulse mode.
 void cyclePin(int pin, int cycles, bool force) {
   if (!force && Config.vars[pvPulses] != 0) return;
-  pulsePin(pin, cycles, 1, 150);
+  pulsePin(pin, cycles, 1, DUTY_CYCLE);
 }
 
 // EEPROM utilities:
