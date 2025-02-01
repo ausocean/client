@@ -28,6 +28,7 @@
 #include <cstdarg>
 #include <cstdio>
 #include "config.h"
+#include <optional>
 
 #if defined ESP8266 || defined ESP32
 #include <EEPROM.h>
@@ -384,13 +385,13 @@ void initPins(bool startup) {
   }
 }
 
-// readPin reads a pin value and returns it, or -1 upon error.
+// readPin reads a pin value and returns it, or nullopt upon error.
 // The data field will be set in the case of POST data, otherwise it will be NULL.
 // When SimulatedBat is non-zero, this value is returned as the value for BAT_PIN one time only.
 // The following call to read BAT_PIN will therefore always return the actual value.
-int readPin(Pin * pin) {
+std::optional<int> readPin(Pin * pin) {
   int pn = atoi(pin->name + 1);
-  pin->value = -1;
+  pin->value = std::nullopt;
   pin->data = NULL;
   switch (pin->name[0]) {
   case 'A':
@@ -429,7 +430,7 @@ int readPin(Pin * pin) {
     break;
   default:
     log(logWarning, "Invalid read from pin %s", pin->name);
-    return -1;
+    return std::nullopt;
   }
   log(logDebug, "Read %s=%d", pin->name, pin->value);
   return pin->value;
@@ -452,28 +453,34 @@ void setAlarmTimer(int level) {
 
 // writePin writes a pin, with writes to the alarm pin stopping/starting the alarm timer.
 void writePin(Pin * pin) {
+  if(not pin->value.has_value()){
+    log(logWarning, "trying to write pin with no value, name: %s", pin->name);
+    return;
+  }
+
   int pn = atoi(pin->name + 1);
   PowerPin * pp;
-  log(logDebug, "Write %s=%d", pin->name, pin->value);
+  auto val = pin->value.value();
+  log(logDebug, "Write %s=%d", pin->name, val);
   switch (pin->name[0]) {
   case 'A':
-    analogWrite(pn, pin->value);
+    analogWrite(pn, val);
     break;
   case 'D':
     if (pn == ALARM_PIN) {
       // Set/reset the alarm timer when writing the alarm pin.
-      setAlarmTimer(pin->value);
+      setAlarmTimer(val);
     }
-    digitalWrite(pn, pin->value);
+    digitalWrite(pn, val);
     break;
   case 'X':
     switch (pn) {
     case xBat:
-      SimulatedBat = pin->value;
-      log(logDebug, "Set simulated battery voltage: %d", pin->value);
+      SimulatedBat = val;
+      log(logDebug, "Set simulated battery voltage: %d", val);
       break;
     case xPulseSuppress:
-      if (pin->value == 1) {
+      if (val == 1) {
         XPin[xPulseSuppress] = 1;
       }
       break;
@@ -1066,7 +1073,14 @@ bool run(int* varsum) {
   if (Config.vars[pvAlarmVoltage] > 0) {
     Pin pin = { .name = {'A', (char)('0'+BAT_PIN), '\0'} };
     log(logDebug, "Checking battery voltage");
-    XPin[xBat] = readPin(&pin);
+    auto volts_reading = readPin(&pin);
+    if(not volts_reading.has_value()){
+      log(logError, "failed to read battery voltage");
+      XPin[xBat] = -1; // Setting to -1 for legacy reasons
+    } else {
+      XPin[xBat] = volts_reading.value();
+    }
+    
     if (XPin[xBat] < Config.vars[pvAlarmVoltage]) {
       log(logWarning, "Battery is below alarm voltage!");
       setError(error::LowVoltage);
