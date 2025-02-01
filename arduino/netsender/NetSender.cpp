@@ -26,6 +26,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <cstdarg>
+#include <optional>
 
 #ifdef ESP8266
 #include <ESP8266WiFi.h>
@@ -391,13 +392,13 @@ void initPins(bool startup) {
   }
 }
 
-// readPin reads a pin value and returns it, or -1 upon error.
+// readPin reads a pin value and returns it, or nullopt upon error.
 // The data field will be set in the case of binary data, otherwise it will be NULL.
 // When SimulatedBat is non-zero, this value is returned as the value for BAT_PIN one time only.
 // The following call to read BAT_PIN will therefore always return the actual value.
-int readPin(Pin * pin) {
+std::optional<int> readPin(Pin * pin) {
   int pn = atoi(pin->name + 1);
-  pin->value = -1;
+  pin->value = std::nullopt;
   pin->data = NULL;
   switch (pin->name[0]) {
   case 'A':
@@ -426,7 +427,7 @@ int readPin(Pin * pin) {
     break;
   default:
     log(logWarning, "Invalid read from pin %s", pin->name);
-    return -1;
+    return std::nullopt;
   }
   log(logDebug, "Read %s=%d", pin->name, pin->value);
   return pin->value;
@@ -449,28 +450,34 @@ void setAlarmTimer(int level) {
 
 // writePin writes a pin, with writes to the alarm pin stopping/starting the alarm timer.
 void writePin(Pin * pin) {
+  if(not pin->value.has_value()){
+    log(logWarning, "trying to write pin with no value, name: %s", pin->name);
+    return;
+  }
+
   int pn = atoi(pin->name + 1);
   PowerPin * pp;
-  log(logDebug, "Write %s=%d", pin->name, pin->value);
+  auto val = pin->value.value();
+  log(logDebug, "Write %s=%d", pin->name, val);
   switch (pin->name[0]) {
   case 'A':
-    analogWrite(pn, pin->value);
+    analogWrite(pn, val);
     break;
   case 'D':
     if (pn == ALARM_PIN) {
       // Set/reset the alarm timer when writing the alarm pin.
-      setAlarmTimer(pin->value);
+      setAlarmTimer(val);
     }
-    digitalWrite(pn, pin->value);
+    digitalWrite(pn, val);
     break;
   case 'X':
     switch (pn) {
     case xBat:
-      SimulatedBat = pin->value;
-      log(logDebug, "Set simulated battery voltage: %d", pin->value);
+      SimulatedBat = val;
+      log(logDebug, "Set simulated battery voltage: %d", val);
       break;
     case xPulseSuppress:
-      if (pin->value == 1) {
+      if (val == 1) {
         XPin[xPulseSuppress] = 1;
       }
       break;
@@ -676,8 +683,10 @@ void wifiOff() {
   wifi_fpm_open();
   wifi_fpm_do_sleep(0xFFFFFFF);
 #endif
+#ifdef __linux__
   WiFi.mode(WIFI_MODE_NULL);
   delay(WIFI_DELAY);
+#endif
 #ifdef ESP32
 #endif
   log(logDebug, "WiFi off");
@@ -834,14 +843,13 @@ bool request(RequestType req, Pin * inputs, Pin * outputs, bool * reconfig, Stri
 
   if (inputs != NULL) {
     for (int ii = 0; ii < MAX_PINS && inputs[ii].name[0] != '\0'; ii++) {
-      if (inputs[ii].value < 0 && strcmp(inputs[ii].name, "X10") != 0) {
-        // Omit negative scalars (except X10) or missing/partial binary data.
-        log(logDebug, "Not sending negative value for %s", inputs[ii].name);
+      if (not inputs[ii].value.has_value()) {
+        log(logDebug, "Not sending NULL value for %s", inputs[ii].name);
         continue;
       }
-      sprintf(path + strlen(path), "&%s=%d", inputs[ii].name, inputs[ii].value);
+      sprintf(path + strlen(path), "&%s=%d", inputs[ii].name, inputs[ii].value.value());
       // Populate the body with binary data, if any.
-      if (inputs[ii].data != NULL && inputs[ii].value > 0) {
+      if (inputs[ii].data != NULL && inputs[ii].value.value() > 0) {
         body += String((const char*)(inputs[ii].data));
       }
     }
@@ -876,7 +884,7 @@ bool request(RequestType req, Pin * inputs, Pin * outputs, bool * reconfig, Stri
         outputs[ii].value = param.toInt();
         writePin(&outputs[ii]);
       } else {
-        outputs[ii].value = -1;
+        outputs[ii].value = std::nullopt;
         log(logWarning, "Missing value for output pin %s", outputs[ii].name);
       }
     }
@@ -1212,7 +1220,14 @@ bool run(int* varsum) {
     pin.name[1] = '0'+BAT_PIN;
     pin.name[2] = '\0';
     log(logDebug, "Checking battery voltage");
-    XPin[xBat] = readPin(&pin);
+    auto volts_reading = readPin(&pin);
+    if(not volts_reading.has_value()){
+      log(logError, "failed to read battery voltage");
+      XPin[xBat] = -1; // Setting to -1 for legacy reasons
+    } else {
+      XPin[xBat] = volts_reading.value();
+    }
+    
     if (XPin[xBat] < Config.vars[pvAlarmVoltage]) {
       if (!XPin[xAlarmed]) {
         // low voltage; raise the alarm and turn off WiFi!
