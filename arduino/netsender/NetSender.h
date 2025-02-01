@@ -27,6 +27,8 @@
 #ifndef NetSender_H
 #define NetSender_H
 
+#include <optional>
+
 namespace NetSender {
 
 #ifdef ESP8266
@@ -82,12 +84,12 @@ typedef struct {
 // Pin represents a pin name and value and optional POST data.
 typedef struct {
   char name [PIN_SIZE];
-  int value;
+  std::optional<int> value; // std::nullopt indicates no invalid or no value.
   byte * data;
 } Pin;
 
 // ReaderFunc represents a pin reading function.
-typedef int (*ReaderFunc)(Pin *);
+typedef std::optional<int> (*ReaderFunc)(Pin *);
 
 // exported globals
 extern Configuration Config;

@@ -63,10 +63,10 @@ int varsum = 0;
 int failures = 0;
 
 // tempReader is the pin reader that polls either the DHT or Dallas Temperature device
-int tempReader(NetSender::Pin *pin) {
-  pin->value = -1;
+std::optional<int> tempReader(NetSender::Pin *pin) {
+  pin->value = std::nullopt;
   if (pin->name[0] != 'X') {
-    return -1;
+    return std::nullopt;
   }
   if (failures >= MAX_FAILURES) {
     Serial.println(F("Reinializing DHT and DT sensors"));
@@ -81,7 +81,7 @@ int tempReader(NetSender::Pin *pin) {
     ff = dht.readTemperature();
     if (isnan(ff)) {
       failures++;
-      return -1;
+      return std::nullopt;
     } else {
       pin->value = 10 * (ff + ZERO_CELSIUS);
       break;
@@ -90,7 +90,7 @@ int tempReader(NetSender::Pin *pin) {
     ff = dht.readHumidity();
     if (isnan(ff)) {
       failures++;
-      return -1;
+      return std::nullopt;
     } else {
       pin->value = 10 * ff;
       break;
@@ -100,13 +100,13 @@ int tempReader(NetSender::Pin *pin) {
     ff = dt.getTempCByIndex(0);
     if (isnan(ff) || ff <= -127) {
       failures++;
-      return -1;
+      return std::nullopt;
     } else {
       pin->value = 10 * (ff + ZERO_CELSIUS);
       break;
     }
   default:
-    return -1; 
+    return std::nullopt; 
   }
   return pin->value;
 }
