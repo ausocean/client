@@ -37,101 +37,57 @@ LICENSE
   <http://www.gnu.org/licenses/>.
 */
 
-#include "NetSender.h"
-#include "DHT.h"
-#include <OneWire.h>
-#include <DallasTemperature.h>
-#include <Adafruit_TSL2591.h>
+// Uncomment sensor enable flags to enable
+#define ENABLE_DHT_SENSOR
+#define ENABLE_DALLAS_TEMP_SENSOR
 
-#define MAX_FAILURES 10
-#ifdef ESP8266
-#define DHTPIN       12
-#define DTPIN        13
-#define RXPIN        3
-#define TXPIN        -1
-#define GPSUART      1
-#else
-#define DHTPIN       14
-#define DTPIN        13
-#define RXPIN        34
-#define TXPIN        -1
-#define GPSUART      2
-#define SDA          16
-#define SCL          17
+
+// If DHT enabled, define type and hardware pins depending on ESP8266 or ESP32
+#ifdef ENABLE_DHT_SENSOR
+  #include "DHT.h"
+  #define DHTTYPE DHT22 // external device #5 
+
+  #ifdef ESP8266
+    #define DHTPIN       12
+  #else
+    #define DHTPIN       36
+  #endif
 #endif
 
-#define ZERO_CELSIUS 273.15 // In Kelvin.
-static constexpr auto tslMax{4294966000.0}; // Saturated max value for TSL2951.
+// If Dallas Temperature enabled, define hardware pin depending on ESP8266 or ESP32
+#ifdef ENABLE_DALLAS_TEMP_SENSOR
+  #include "dallas_temp.h"
+  #ifdef ESP8266
+    #define DTPIN        13
+  #else
+    #define DTPIN        39
+  #endif
+#endif
 
-#define DHTTYPE DHT22 // external device #5 
-DHT dht(DHTPIN, DHTTYPE);
-OneWire onewire(DTPIN);
-DallasTemperature dt(&onewire); // external device #6
-static constexpr auto TSL_ID{70};
-Adafruit_TSL2591 tsl(TSL_ID);
+#include <vector>
+#include "NetSender.h"
 
-#define MAX_NMEA 83
-char NMEASentence[MAX_NMEA];
+#include "sensor.h"
 
-int varsum = 0;
-int failures = 0;
+// Vector to store all sensor objects
+std::vector<Sensor*> sensors;
 
-// tempReader is the pin reader that polls either the DHT, Dallas Temperature device or Photometer.
-std::optional<int> tempReader(NetSender::Pin *pin) {
+// reader is the pin reader that polls available sensors
+std::optional<int> reader(NetSender::Pin *pin) {
   pin->value = std::nullopt;
   if (pin->name[0] != 'X') {
     return std::nullopt;
   }
-  if (failures >= MAX_FAILURES) {
-    Serial.println(F("Reinializing DHT and DT sensors"));
-    dht.begin();
-    dt.begin();
-    tsl.begin();
-    failures = 0;
+
+  auto requestedPin = atoi(pin->name + 1);
+  for (Sensor* sensor : sensors) {
+    auto res = sensor->read(requestedPin);
+    if(res.has_value()) {
+      pin->value = res;
+      break;
+    }
   }
-  int pn = atoi(pin->name + 1);
-  float ff;
-  uint16_t lum;
-  switch(pn) {
-  case 50: // DHT air temperature
-    ff = dht.readTemperature();
-    if (isnan(ff)) {
-      failures++;
-      return std::nullopt;
-    } else {
-      pin->value = 10 * (ff + ZERO_CELSIUS);
-      break;
-    }
-  case 51: // DHT humidity
-    ff = dht.readHumidity();
-    if (isnan(ff)) {
-      failures++;
-      return std::nullopt;
-    } else {
-      pin->value = 10 * ff;
-      break;
-    }
-  case 60: // Dallas temperature
-    dt.requestTemperatures();
-    ff = dt.getTempCByIndex(0);
-    if (isnan(ff) || ff <= -127) {
-      failures++;
-      return std::nullopt;
-    } else {
-      pin->value = 10 * (ff + ZERO_CELSIUS);
-      break;
-    }
-  case 70: // TSL Lux
-    lum = tsl.getLuminosity(TSL2591_FULLSPECTRUM);
-    if ((lum <= 0) || isnan(lum)) {
-      failures++;
-      return std::nullopt;
-    }
-    pin->value = lum;
-    break;
-  default:
-    return std::nullopt; 
-  }
+
   return pin->value;
 }
 
@@ -214,8 +170,6 @@ std::optional<int> gpsReader(NetSender::Pin *pin) {
 // required Arduino routines
 // NB: setup runs everytime ESP comes out of a deep sleep
 void setup() {
-  dht.begin();
-  dt.begin();
   Wire.begin(16,17);
   tsl.setGain(TSL2591_GAIN_LOW);
   tsl.setTiming(TSL2591_INTEGRATIONTIME_100MS);
@@ -223,11 +177,21 @@ void setup() {
   Serial2.begin(9600, SERIAL_8N1, RXPIN, TXPIN);
   NetSender::ExternalReader = &tempReader;
   NetSender::PostReader = &gpsReader;
+  #ifdef ENABLE_DHT_SENSOR
+    sensors.push_back(new DHT(DHTPIN, DHTTYPE, []() { Serial.println("DHT exceeded failures, restarting!");}));
+  #endif
+
+  #ifdef ENABLE_DALLAS_TEMP_SENSOR
+    sensors.push_back(new DallasTemp(DTPIN, []() { Serial.println("Dallas temp exceeded failures, restarting!");}));
+  #endif
+
+  NetSender::ExternalReader = &reader;
   NetSender::init();
   loop();
 }
 
 void loop() {
+  auto varsum{0};
   while (!NetSender::run(&varsum)) {
     ;
   }
