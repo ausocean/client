@@ -156,3 +156,24 @@ void serviceInterruptRain() {
     SDLWeather::_currentRainCount++;
   }  
 }
+
+std::optional<NetSender::Pin> SDLWeather::read(int softwarePin) {
+  switch(softwarePin) {
+  case 30: // TWS
+    return NetSender::Pin{ .value = 10 * getWindSpeed() };
+    break;
+  case 31: // TWG
+    return NetSender::Pin{ .value = 10 * getWindGust() };
+    break;
+  case 32: // TWA
+    return NetSender::Pin{ .value = 10 * getWindDirection()};
+    break;
+  case 33: // PPT
+    _rainTotal += getCurrentRainTotal();
+    return NetSender::Pin{ .value = 10 * _rainTotal};
+    break;
+  default:
+    return std::nullopt;
+  }
+  return std::nullopt;
+}
