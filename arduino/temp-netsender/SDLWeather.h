@@ -17,10 +17,12 @@
 #define SDL_MODE_DELAY 1
 
 #include "Arduino.h"
+#include "sensor.h"
+#include <optional>
 
 extern "C" void serviceInterruptAnem(void)  __attribute__ ((signal));
 extern "C" void serviceInterruptRain(void)  __attribute__ ((signal));
-class SDLWeather
+class SDLWeather : public Sensor
 {
   public:
   SDLWeather(int pinAnem, int pinRain, int ADChannel);
@@ -49,9 +51,13 @@ class SDLWeather
 
   float _currentWindSpeed;
   float _currentWindDirection;
+
+  float _rainTotal{0.0};
     
   void startWindSample(float sampleTime);
   float getCurrentWindSpeedWhenSampling();
+
+  std::optional<int> read(int softwarePin) override;
 };
 
 #endif
