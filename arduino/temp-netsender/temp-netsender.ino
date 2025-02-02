@@ -41,6 +41,7 @@ LICENSE
 // Uncomment sensor enable flags to enable
 #define ENABLE_DHT_SENSOR
 #define ENABLE_DALLAS_TEMP_SENSOR
+#define ENABLE_SDL_WEATHER_SENSOR
 
 
 // If DHT enabled, define type and hardware pins depending on ESP8266 or ESP32
@@ -63,6 +64,14 @@ LICENSE
   #else
     #define DTPIN        39
   #endif
+#endif
+
+// If SDL Weather enabled, define hardware pins and channel
+#ifdef ENABLE_SDL_WEATHER_SENSOR
+  #include "SDLWeather.h"
+  #define SDL_PIN_ANEM  4
+  #define SDL_PIN_RAIN  5
+  #define SDL_AD_CHAN   A0
 #endif
 
 
@@ -102,6 +111,10 @@ void setup() {
 
   #ifdef ENABLE_DALLAS_TEMP_SENSOR
     sensors.push_back(new DallasTemp(DTPIN, []() { Serial.println("Dallas temp exceeded failures, restarting!");}));
+  #endif
+
+  #ifdef ENABLE_SDL_WEATHER_SENSOR
+    sensors.push_back(new SDLWeather(SDL_PIN_ANEM, SDL_PIN_RAIN, SDL_AD_CHAN));
   #endif
 
   NetSender::ExternalReader = &reader;

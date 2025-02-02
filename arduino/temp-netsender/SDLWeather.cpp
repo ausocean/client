@@ -156,3 +156,24 @@ void serviceInterruptRain() {
     SDLWeather::_currentRainCount++;
   }  
 }
+
+std::optional<int> SDLWeather::read(int softwarePin) {
+  switch(softwarePin) {
+  case 30: // TWS
+    return 10 * getWindSpeed();
+    break;
+  case 31: // TWG
+    return 10 * getWindGust();
+    break;
+  case 32: // TWA
+    return 10 * getWindDirection();
+    break;
+  case 33: // PPT
+    _rainTotal += getCurrentRainTotal();
+    return 10 * _rainTotal;
+    break;
+  default:
+    return std::nullopt;
+  }
+  return std::nullopt;
+}
