@@ -53,6 +53,7 @@ namespace NetSender {
 #define NAV_PIN                2    // GPIO pin corresponding to nav light (yellow).
 #define STATUS_PIN             2    // GPIO pin corresponding to status LED (blue).
 #define BAT_PIN                0    // Analog pin that measures battery voltage.
+#define DUTY_CYCLE             150  // Duty cycle used when flashing STATUS_PIN.
 #endif
 #if defined ESP32 || defined __linux__
 #define ALARM_PIN              5    // GPIO pin corresponding to the alarm LED (red).
@@ -60,7 +61,7 @@ namespace NetSender {
 #define NAV_PIN                19   // GPIO pin corresponding to nav light (yellow).
 #define STATUS_PIN             23   // GPIO pin corresponding to status LED (blue).
 #define BAT_PIN                4    // Analog pin that measures battery voltage.
-
+#define DUTY_CYCLE             50   // Duty cycle used when flashing STATUS_PIN.
 #endif
 #define NUM_RELAYS             4    // Number of relays.
 
@@ -515,10 +516,12 @@ void pulsePin(int pin, int pulses, int width, int dutyCycle=50) {
   }
 }
 
-// cyclePin cycles a digital pin on and off, unless in pulse mode.
-void cyclePin(int pin, int cycles, bool force) {
-  if (!force && Config.vars[pvPulses] != 0) return;
-  pulsePin(pin, cycles, 1, 150);
+//  cycles a digital pin on and off, unless ESP8266 is in pulse mode.
+void cyclePin(int pin, int cycles) {
+#ifdef ESP8266
+  if (Config.vars[pvPulses] != 0) return;
+#endif
+  pulsePin(pin, cycles, 1, DUTY_CYCLE);
 }
 
 // EEPROM utilities:
@@ -639,7 +642,7 @@ void restart(bootReason reason, bool alarm) {
     writeAlarm(true, true);
     delay(2000);
   }
-  cyclePin(STATUS_PIN, statusRestart, true);
+  cyclePin(STATUS_PIN, statusRestart);
   ESP.restart();
 }
 
@@ -950,7 +953,7 @@ bool config() {
   pins[1].name[0] = '\0';
 
   if (!request(RequestConfig, pins, NULL, &reconfig, reply) || extractJson(reply, "er", param)) {
-    cyclePin(STATUS_PIN, statusConfigError, false);
+    cyclePin(STATUS_PIN, statusConfigError);
     return false;
   } 
   log(logDebug, "Config response: %s", reply.c_str());
@@ -989,7 +992,7 @@ bool config() {
   if (changed) {
     writeConfig(&Config);
     initPins(false); // NB: Don't re-initalize power pins.
-    cyclePin(STATUS_PIN, statusConfigUpdate, false);
+    cyclePin(STATUS_PIN, statusConfigUpdate);
   }
   Configured = true;
   return true;
@@ -1217,7 +1220,7 @@ bool run(int* varsum) {
       if (!XPin[xAlarmed]) {
         // low voltage; raise the alarm and turn off WiFi!
         log(logWarning, "Low voltage alarm!");
-        cyclePin(STATUS_PIN, statusVoltageAlarm, true);
+        cyclePin(STATUS_PIN, statusVoltageAlarm);
         writeAlarm(true, true);
         wifiControl(false);
       }
@@ -1252,7 +1255,7 @@ bool run(int* varsum) {
       writeAlarm(true, false);
       NetworkFailures = 0;
     } else {
-      cyclePin(STATUS_PIN, statusWiFiError, false);
+      cyclePin(STATUS_PIN, statusWiFiError);
     }
     return pause(false, pulsed, &lag);
   }
@@ -1299,7 +1302,7 @@ bool run(int* varsum) {
 
   // Adjust for pulse timing inaccuracy and network time.
   pause(true, pulsed, &lag);
-  cyclePin(STATUS_PIN, statusOK, false);
+  cyclePin(STATUS_PIN, statusOK);
   if (Config.monPeriod == Config.actPeriod) {
     log(logDebug, "Cycle complete");
     return true;
