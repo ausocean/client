@@ -3,7 +3,7 @@
     NetSender - an Arduino library for sending measured values to the cloud and writing values from the cloud.
       
   License:
-    Copyright (C) 2017-2024 The Australian Ocean Lab (AusOcean).
+    Copyright (C) 2017-2025 The Australian Ocean Lab (AusOcean).
 
     This file is part of NetSender. NetSender is free software: you can
     redistribute it and/or modify it under the terms of the GNU
@@ -26,6 +26,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <cstdarg>
+#include <cstdio>
 
 #ifdef ESP8266
 #include <ESP8266WiFi.h>
@@ -83,7 +84,7 @@ namespace NetSender {
 // Constants:
 enum bootReason {
   bootNormal = 0x00, // Normal reboot (operator requested).
-  bootWiFi   = 0x01, // Reboot due to WiFi error.
+  bootWiFi   = 0x01, // Reboot due to error when trying to disconnect from Wifi.
   bootAlarm  = 0x02, // Alarm auto-restart.
   bootClear  = 0x03, // Alarm cleared; written when config or vars updated following an auto-restart.
 };
@@ -119,7 +120,7 @@ enum rcCode {
 };
 
 // Persistent variables (stored in EEPROM as part of configuration).
-// NB: Keep indexes in sync with names.
+// NB: Keep indexes in sync with names, and update MAX_VARS in .h if needed.
 enum pvIndex {
   pvLogLevel,
   pvPulses,
@@ -201,8 +202,8 @@ const char* VarTypes = "{\"LogLevel\":\"uint\", \"Pulses\":\"uint\", \"PulseWidt
 typedef enum logLevel {
   logNone    = 0,
   logError   = 1,
-  logInfo    = 2,
-  logWarning = 3,
+  logWarning = 2,
+  logInfo    = 3,
   logDebug   = 4,
   logMax     = 5
 } LogLevel;
@@ -369,6 +370,7 @@ void resetPowerPins(bool alarm) {
 
 // initPins initializes digital pins. On startup, power pins are also initialized.
 void initPins(bool startup) {
+  log(logDebug, "Initializing pins");
   Pin pins[MAX_PINS];
 
   for (int ii = 0, sz = setPins(Config.inputs, pins); ii < sz; ii++) {
@@ -538,6 +540,7 @@ void readConfig(Configuration* config) {
       *bytep++ = ch;
     }
   }
+  // Only clear the config if there's been a minor version change.
   if (config->version/10 != VERSION/10) {
     log(logDebug, "Clearing config with version %d", config->version);
     memset((unsigned char *)config, 0, sizeof(Configuration));
@@ -553,7 +556,7 @@ void printConfig() {
   Serial.print(F("NetSender v")), Serial.println(VERSION);
   Serial.print(F("MAC address: ")), Serial.println(MacAddress);
   Serial.print(F("Configuration size: ")), Serial.println(sizeof(Configuration));
-  Serial.print(F("version: ")), Serial.println(Config.version);
+  Serial.print(F("Configration version: ")), Serial.println(Config.version);
   Serial.print(F("boot: ")), Serial.println(Config.boot);
   Serial.print(F("wifi: ")), Serial.println(Config.wifi);
   Serial.print(F("dkey: ")), Serial.println(Config.dkey);
@@ -629,7 +632,7 @@ void writeAlarm(bool alarm, bool continuous) {
 // alarm before restarting when alarm is true.
 // NB: For restart purposes, bootClear is treated like bootAlarm.
 void restart(bootReason reason, bool alarm) {
-  log(logInfo, "Restarting (%d,%d)", reason, alarm);
+  log(logInfo, "**** Restarting (%d,%d) ****", reason, alarm);
   if (Config.boot == bootClear) {
     Config.boot = bootAlarm;
   }
@@ -647,6 +650,7 @@ void restart(bootReason reason, bool alarm) {
 }
 
 // wifiOn and wifiOff enable or disable WiFi functionality to conserve power.
+// We shouldn't use these functions directly in the run loop, but use wifiBegin() and wifiControl(false) instead.
 // NB: Calling WiFi.mode(WIFI_MODE_NULL) produces the following error: "wifi:NAN WiFi stop"
 // According to https://github.com/espressif/esp-idf/issues/12473, it can be ignored.
 void wifiOn() {
@@ -693,6 +697,7 @@ void wifiOff() {
 // ESP failure and results in a restart.
 bool wifiControl(bool on) {
   if (on) {
+    log(logDebug, "Turning WiFi on");
     if (WiFi.status() == WL_CONNECTED) {
       return true; // Nothing to do.
     }
@@ -702,6 +707,7 @@ bool wifiControl(bool on) {
       return false;
     }
   } else {
+    log(logDebug, "Turning WiFi off");
     WiFi.disconnect();
     for (int attempts = 0; WiFi.status() == WL_CONNECTED && attempts < WIFI_ATTEMPTS; attempts++) {
       delay(WIFI_DELAY);
@@ -1074,7 +1080,10 @@ void writeVars(int vars[MAX_VARS]) {
 void init(void) {
   // Disable WiFi persistence in flash memory.
   WiFi.persistent(false);
+
+  // Start WiFi in station mode just until we can get the MAC address. Without the WiFi hardware on, it won't give the correct MAC below.
   WiFi.mode(WIFI_STA);
+
   Serial.begin(115200);
   pinMode(ALARM_PIN, OUTPUT);
   pinMode(NAV_PIN, OUTPUT);
@@ -1094,10 +1103,11 @@ void init(void) {
   // Initialize GPIO pins, including power pins.
   initPins(true);
 
-  // Save the formatted MAC address.
+  // Save the formatted MAC address, then turn the WiFi off.
   byte mac[6];
   WiFi.macAddress(mac);
   fmtMacAddress(mac, MacAddress);
+  WiFi.mode(WIFI_MODE_NULL);
 }
 
 // Pause to maintain timing accuracy, adjusting the timing lag in the process.
@@ -1106,13 +1116,14 @@ void init(void) {
 // since timing accuracy is moot. If pulsing, we pause for the active time remaining this cycle,
 // unless we're out of time.
 bool pause(bool ok, unsigned long pulsed, long * lag) {
+  wifiControl(false);
+
   if (!ok && pulsed == 0) {
     log(logInfo, "Retrying in %ds", RETRY_PERIOD);
     delay(RETRY_PERIOD * 1000L);
     return ok;
   }
 
-  wifiControl(false);
   unsigned long now = millis();
   long remaining = Config.actPeriod * 1000L - pulsed;
   *lag += (now - Time - pulsed);
@@ -1139,6 +1150,7 @@ bool pause(bool ok, unsigned long pulsed, long * lag) {
 // May return false while either connected to WiFi or not.
 // NB: pulse suppression must be re-enabled each cycle via the X14 pin.
 bool run(int* varsum) {
+  log(logDebug, "---- starting run cycle ----");
   Pin inputs[MAX_PINS], outputs[MAX_PINS];
   String reply;
   bool reconfig = false;
@@ -1170,9 +1182,11 @@ bool run(int* varsum) {
       }
       *varsum = VarSum;
     }
+    // Turn wifi off after vars request.
+    wifiControl(false);
   }
 
-  // Restart if the alarm has gone for on too long.
+  // Restart if the alarm has gone on for too long.
   // NB: Check AlarmedTime regardless of whether XPin[xAlarmed] is true or not.
   if (AlarmedTime > 0) {
     int alarmed; // Alarmed duration in seconds.
@@ -1222,6 +1236,7 @@ bool run(int* varsum) {
         log(logWarning, "Low voltage alarm!");
         cyclePin(STATUS_PIN, statusVoltageAlarm);
         writeAlarm(true, true);
+        // Wifi should already be off but just in case.
         wifiControl(false);
       }
       return pause(false, pulsed, &lag);
@@ -1234,7 +1249,7 @@ bool run(int* varsum) {
       writeAlarm(false, true);
     }
     if (XPin[xBat] > Config.vars[pvPeakVoltage]) {
-      log(logWarning, "High voltage");
+      log(logWarning, "High voltage, pin value: %d, peak voltage: %d", XPin[xBat], Config.vars[pvPeakVoltage]);
     }
   } else {
     XPin[xBat] = -1;
@@ -1247,7 +1262,7 @@ bool run(int* varsum) {
     readPin(&inputs[ii]);
   }
 
-  // Turn on WiFI, connect, and then send input values and/or receive output values.
+  // Turn on WiFi, connect, and then send input values and/or receive output values.
   if (!wifiBegin()) {
     NetworkFailures++;
     if (Config.vars[pvAlarmNetwork] > 0 && NetworkFailures >= Config.vars[pvAlarmNetwork]) {
