@@ -1170,19 +1170,31 @@ bool run(int* varsum) {
   }
   Time = now; // record the start of each cycle
 
-  // Have we just restarted due to an alarm?
+  // Handle reboot due to alarm.
   if (Config.boot == bootAlarm) {
-    // Clear the boot state so we only perform this check once per restart.
+    log(logInfo, "Restarted due to alarm — checking for var updates.");
+
+    // Mark the boot as handled so we don’t do this again.
     Config.boot = bootClear;
+
     // Attempt to refresh vars in case the recent alarm was due to operator error.
-    if (wifiBegin() && getVars(vars, &changed)) {
-      if (changed) {
-        log(logDebug, "Persistent variable(s) changed");
-        writeVars(vars);
+    bool gotVars = false;
+    if (wifiBegin()) {
+      gotVars = getVars(vars, &changed);
+      if (gotVars) {
+        if (changed) {
+          log(logDebug, "Persistent variable(s) changed after alarm recovery.");
+          writeVars(vars);
+        }
+        *varsum = VarSum;
+      } else {
+        log(logWarning, "Failed to get vars after alarm recovery.");
       }
-      *varsum = VarSum;
+    } else {
+      log(logWarning, "Failed to connect to Wi-Fi during alarm recovery.");
     }
-    // Turn wifi off after vars request.
+
+    // Always turn off Wi-Fi afterward to ensure stable pin reads and save power.
     wifiControl(false);
   }
 
