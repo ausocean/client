@@ -6,7 +6,7 @@
     See https://www.cloudblue.org
 
   License:
-    Copyright (C) 2017-2024 The Australian Ocean Lab (AusOcean).
+    Copyright (C) 2017-2025 The Australian Ocean Lab (AusOcean).
 
     This file is part of NetSender. NetSender is free software: you can
     redistribute it and/or modify it under the terms of the GNU
@@ -36,7 +36,7 @@ namespace NetSender {
 #define RESERVED_SIZE          48
 #endif
 #if defined ESP32 || defined __linux__
-#define VERSION                202
+#define VERSION                210
 #define MAX_PINS               20
 #define DKEY_SIZE              32
 #define RESERVED_SIZE          64
@@ -45,7 +45,7 @@ namespace NetSender {
 #define WIFI_SIZE              80
 #define PIN_SIZE               4
 #define IO_SIZE                (MAX_PINS * PIN_SIZE)
-#define MAX_VARS               10
+#define MAX_VARS               11
 
 typedef enum {
   RequestConfig = 0,
