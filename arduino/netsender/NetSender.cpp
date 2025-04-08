@@ -861,9 +861,10 @@ bool request(RequestType req, Pin * inputs, Pin * outputs, bool * reconfig, Stri
       writeAlarm(false, true); // Reset alarm.
     }
     NetworkFailures = 0;
+    log(logDebug, "Reset NetworkFailures to 0");
   } else {
     NetworkFailures++;
-    log(logDebug, "Network failures: %d", NetworkFailures);
+    log(logDebug, "httpRequest failed. Network failures: %d", NetworkFailures);
     if (Config.vars[pvAlarmNetwork] > 0 && NetworkFailures >= Config.vars[pvAlarmNetwork]) {
       // Too many network failures; raise the alarm!
       writeAlarm(true, false);
@@ -1277,10 +1278,12 @@ bool run(int* varsum) {
   // Turn on WiFi, connect, and then send input values and/or receive output values.
   if (!wifiBegin()) {
     NetworkFailures++;
+    log(logDebug, "wifiBegin failed. Network failures: %d", NetworkFailures);
     if (Config.vars[pvAlarmNetwork] > 0 && NetworkFailures >= Config.vars[pvAlarmNetwork]) {
       // too many network failures; raise the alarm!
       writeAlarm(true, false);
       NetworkFailures = 0;
+      log(logDebug, "Reset NetworkFailures to 0");
     } else {
       cyclePin(STATUS_PIN, statusWiFiError);
     }
