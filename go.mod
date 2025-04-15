@@ -1,6 +1,8 @@
 module github.com/ausocean/client
 
-go 1.22.2
+go 1.23.0
+
+toolchain go1.23.3
 
 require (
 	github.com/Shopify/toxiproxy v2.1.4+incompatible
@@ -12,7 +14,7 @@ require (
 	github.com/kidoman/embd v0.0.0-20170508013040-d3d8c0c5c68d
 	github.com/yryz/ds18b20 v0.0.0-20200527154408-4a8f84bb82d4
 	gocv.io/x/gocv v0.39.0
-	golang.org/x/crypto v0.31.0
+	golang.org/x/crypto v0.35.0
 	gonum.org/v1/gonum v0.15.0
 	gonum.org/v1/plot v0.14.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
@@ -35,6 +37,6 @@ require (
 	go.uber.org/multierr v1.10.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
 	golang.org/x/image v0.14.0 // indirect
-	golang.org/x/sys v0.28.0 // indirect
-	golang.org/x/text v0.21.0 // indirect
+	golang.org/x/sys v0.30.0 // indirect
+	golang.org/x/text v0.22.0 // indirect
 )
