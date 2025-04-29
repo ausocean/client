@@ -13,8 +13,8 @@ github.com/ajstarks/svgo v0.0.0-20211024235047-1546f124cd8b h1:slYM766cy2nI3BwyR
 github.com/ajstarks/svgo v0.0.0-20211024235047-1546f124cd8b/go.mod h1:1KcenG0jGWcpt8ov532z81sp/kMMUG485J2InIOyADM=
 github.com/andreyvit/diff v0.0.0-20170406064948-c7f18ee00883 h1:bvNMNQO63//z+xNgfBlViaCIJKLlCJ6/fmUseuG0wVQ=
 github.com/andreyvit/diff v0.0.0-20170406064948-c7f18ee00883/go.mod h1:rCTlJbsFo29Kk6CurOXKm700vrz8f0KW0JNfpkRJY/8=
-github.com/ausocean/utils v0.3.0 h1:PcDn39Z0Gyj30kzAl7+B9tDSLsA98O82fsGbAHIVQc8=
-github.com/ausocean/utils v0.3.0/go.mod h1:2e45OMTujRqlkN8dIvnAOUy3AdkFkRCTjbpc9jlxz+I=
+github.com/ausocean/utils v0.3.2 h1:r2m80QBMYAD5ORnEpxPxCzV5jrCjUqhW8Adc91S0TJE=
+github.com/ausocean/utils v0.3.2/go.mod h1:9exrikNHIvq0eKPX6qzPWRPnTNRCjA7igTUqMalFyfQ=
 github.com/campoy/embedmd v1.0.0 h1:V4kI2qTJJLf4J29RzI/MAt2c3Bl4dQSYPuflzwFH2hY=
 github.com/campoy/embedmd v1.0.0/go.mod h1:oxyr9RCiSXg0M3VJ3ks0UGfp98BpSSGr0kpiX3MzVl8=
 github.com/d2r2/go-dht v0.0.0-20200119175940-4ba96621a218 h1:z3u7ZAkBvqHD2zaECn0qd1BwMCTiAYcQjFdU8vflVHo=
