@@ -12,6 +12,7 @@ DESCRIPTION
     X50 = DHT temperature
     X51 = DHT humidity
     X60 = Dallas temperature (DS18B20, etc.)
+    X70 = TSL2951 Light Sensor
     
   Temperatures are reported in degrees Kelvin times 10. Humidity is
   reported as a percentage times 10, i.e., 482 for 48.2% A value of -1
@@ -42,6 +43,7 @@ LICENSE
 #include "DHT.h"
 #include <OneWire.h>
 #include <DallasTemperature.h>
+#include <Adafruit_TSL2591.h>
 
 
 #define MAX_FAILURES 10
@@ -58,11 +60,12 @@ LICENSE
 DHT dht(DHTPIN, DHTTYPE);
 OneWire onewire(DTPIN);
 DallasTemperature dt(&onewire); // external device #6
+Adafruit_TSL2591 tsl(70);
 
 int varsum = 0;
 int failures = 0;
 
-// tempReader is the pin reader that polls either the DHT or Dallas Temperature device
+// tempReader is the pin reader that polls either the DHT, Dallas Temperature device, or Photometer.
 int tempReader(NetSender::Pin *pin) {
   pin->value = -1;
   if (pin->name[0] != 'X') {
@@ -72,10 +75,12 @@ int tempReader(NetSender::Pin *pin) {
     Serial.println(F("Reinializing DHT and DT sensors"));
     dht.begin();
     dt.begin();
+    tsl.begin();
     failures = 0;
   }
   int pn = atoi(pin->name + 1);
   float ff;
+  sensors_event_t event;
   switch(pn) {
   case 50: // DHT air temperature
     ff = dht.readTemperature();
@@ -105,6 +110,17 @@ int tempReader(NetSender::Pin *pin) {
       pin->value = 10 * (ff + ZERO_CELSIUS);
       break;
     }
+  case 70: // TSL Lux
+    tsl.getEvent(&event);
+    if ((event.light == 0) |
+      (event.light > 4294966000.0) |
+      (event.light <-4294966000.0))
+    {
+      failures++;
+      return -1;
+    }
+    pin->value = event.light;
+    break;
   default:
     return -1; 
   }
@@ -116,6 +132,10 @@ int tempReader(NetSender::Pin *pin) {
 void setup() {
   dht.begin();
   dt.begin();
+  Wire.begin(16,17);
+  tsl.setGain(TSL2591_GAIN_LOW);
+  tsl.setTiming(TSL2591_INTEGRATIONTIME_100MS);
+  tsl.begin();
   NetSender::ExternalReader = &tempReader;
   NetSender::init();
   loop();
