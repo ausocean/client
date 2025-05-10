@@ -1018,10 +1018,10 @@ bool getVars(int vars[MAX_VARS], bool* changed) {
   if (!request(RequestVars, NULL, NULL, &reconfig, reply) || extractJson(reply, "er", param)) {
     return false;
   }
-  bool hasId = extractJson(reply, "id", id);
+  auto hasId = extractJson(reply, "id", id);
   if (hasId) log(logDebug, "id=%s", id.c_str());
 
-  bool hasMode = extractJson(reply, "mode", mode);
+  auto hasMode = extractJson(reply, "mode", mode);
   if (hasMode) {
     log(logDebug, "mode=%s", mode.c_str());
     Mode = mode;
