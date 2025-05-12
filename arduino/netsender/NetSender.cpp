@@ -231,11 +231,13 @@ void restart(bootReason, bool);
 
 // Utilities:
 
-// log prints a message if the given level is less than or equal to the LogLevel var level.
+// log prints a message if the given level is less than or equal to the LogLevel var level,
+// or if the system is not yet configured.
 void log(LogLevel level, const char* format, ...) {
-  if (level > Config.vars[pvLogLevel] || level < logNone) {
+  if (Configured && (level > Config.vars[pvLogLevel] || level < logNone)) {
     return;
   }
+
   printf("%s: ", logLevels[level]);
   va_list args;
   va_start(args, format);
