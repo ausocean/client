@@ -210,6 +210,11 @@ typedef enum logLevel {
 
 const char* logLevels[] = {"", "Error", "Warning", "Info", "Debug"};
 
+namespace mode {
+  constexpr const char* Normal = "Normal";
+  constexpr const char* LowVoltageAlarm = "LowVoltageAlarm";
+}
+
 // Exported globals.
 Configuration Config;
 ReaderFunc ExternalReader = NULL;
@@ -225,7 +230,7 @@ static unsigned long Time = 0;
 static unsigned long AlarmedTime = 0;
 static int NetworkFailures = 0;
 static int SimulatedBat = 0;
-static String Mode = "Normal";
+static String Mode = mode::Normal;
 
 // Forward declarations.
 void restart(bootReason, bool);
@@ -1002,7 +1007,7 @@ bool config() {
     cyclePin(STATUS_PIN, statusConfigUpdate);
   }
   Configured = true;
-  Mode = "Normal";
+  Mode = mode::Normal;
   return true;
 }
 
@@ -1254,7 +1259,7 @@ bool run(int* varsum) {
       if (!XPin[xAlarmed]) {
         // low voltage; raise the alarm and turn off WiFi!
         log(logWarning, "Low voltage alarm!");
-        Mode = "LowVoltageAlarm";
+        Mode = mode::LowVoltageAlarm;
         // Notfiy the service that we're alarmed.
         if (wifiBegin()) {
 	  bool reconfig;
@@ -1275,7 +1280,7 @@ bool run(int* varsum) {
         return pause(false, pulsed, &lag);
       }
       log(logInfo, "Low voltage alarm cleared");
-      Mode = "Normal";
+      Mode = mode::Normal;
       writeAlarm(false, true);
     }
     if (XPin[xBat] > Config.vars[pvPeakVoltage]) {
