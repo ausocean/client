@@ -1263,16 +1263,11 @@ bool run(int* varsum) {
         log(logWarning, "Low voltage alarm!");
         Mode = mode::LowVoltageAlarm;
         // Notfiy the service that we're alarmed.
-        if (wifiBegin()) {
-	  bool reconfig;
-	  String reply;
-          if (!request(RequestPoll, NULL, NULL, &reconfig, reply)) {
-            log(logWarning, "Failed to notify service of low voltage alarm");
-          }
+        if (!(wifiBegin() && request(RequestPoll, NULL, NULL, &reconfig, reply))) {
+          log(logWarning, "Failed to notify service of low voltage alarm");
 	}
         cyclePin(STATUS_PIN, statusVoltageAlarm);
         writeAlarm(true, true);
-        // Wifi should already be off but just in case.
         wifiControl(false);
       }
       return pause(false, pulsed, &lag);
