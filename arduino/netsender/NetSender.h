@@ -30,13 +30,13 @@
 namespace NetSender {
 
 #ifdef ESP8266
-#define VERSION                177
+#define VERSION                178
 #define MAX_PINS               10
 #define DKEY_SIZE              20
 #define RESERVED_SIZE          48
 #endif
 #if defined ESP32 || defined __linux__
-#define VERSION                212
+#define VERSION                213
 #define MAX_PINS               20
 #define DKEY_SIZE              32
 #define RESERVED_SIZE          64
