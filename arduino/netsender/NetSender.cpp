@@ -1018,7 +1018,7 @@ bool config() {
 // Transient vars, such as "id" or "mode" are not saved.
 // Missing persistent vars default to 0, except for peak voltage and auto restart.
 bool getVars(int vars[MAX_VARS], bool* changed) {
-  String reply, error, id, mode, param;
+  String reply, error, id, mode, param, var;
   bool reconfig;
   *changed = false;
 
@@ -1028,7 +1028,12 @@ bool getVars(int vars[MAX_VARS], bool* changed) {
   auto hasId = extractJson(reply, "id", id);
   if (hasId) log(logDebug, "id=%s", id.c_str());
 
-  auto hasMode = extractJson(reply, "mode", mode);
+  if (hasId) {
+    var = id + ".mode";
+  } else {
+    var = "mode";
+  }
+  auto hasMode = extractJson(reply, var.c_str(), mode);
   if (hasMode) {
     log(logDebug, "mode=%s", mode.c_str());
     Mode = mode;
@@ -1037,7 +1042,7 @@ bool getVars(int vars[MAX_VARS], bool* changed) {
   for  (int ii = 0; ii < MAX_VARS; ii++) {
     int val = 0;
     if (hasId) {
-      String var = id + '.' + String(PvNames[ii]);
+      var = id + '.' + String(PvNames[ii]);
       if (extractJson(reply, var.c_str(), param)) {
         val = param.toInt();
       }
@@ -1262,6 +1267,7 @@ bool run(int* varsum) {
         // low voltage; raise the alarm and turn off WiFi!
         log(logWarning, "Low voltage alarm!");
         Mode = mode::LowVoltageAlarm;
+        log(logDebug, "mode=%s", Mode);
         // Notfiy the service that we're alarmed.
         if (!(wifiBegin() && request(RequestPoll, NULL, NULL, &reconfig, reply))) {
           log(logWarning, "Failed to notify service of low voltage alarm");
