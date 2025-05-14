@@ -331,20 +331,80 @@ PowerPin * getPowerPin(int pin) {
   }
   return NULL;
 }
+// isValidPinName returns true if the given name is the letter A, D,
+// or X followed by one or two digits, or false otherwise. If len is
+// zero, the name must be null-terminated.
+bool isValidPinName(const char *name, size_t len) {
+  if (len == 0) {
+    len = strlen(name);
+  }
+  if (len > PIN_SIZE-1) {
+    return false;
+  }
+  switch(name[0]) {
+  case 'A':
+  case 'D':
+  case 'X':
+    if (!isdigit(name[1])) {
+      return false;
+    }
+    if (len == 2) {
+      return true; // Single-digit pin.
+    }
+    if (!isdigit(name[2])) {
+      return false;
+    }
+    return true; // Double-digit pin.
+  }
+  return false;
+}
 
-// setPins sets pin names in the Pin array from comma-separated names, clears unused pins and returns the size in use.
-int setPins(const char * names, Pin * pins) {
-  char *start = (char *)names;
+// checkPins returns the number of valid comma-separated pin names, or
+// -1 if any pin is invalid or the number of pins exceeds MAX_PINS.
+int checkPins(const char * names) {
+  const char *start = names;
   int ii = 0;
-  for (; *start != '\0' && ii < MAX_PINS; ii++) {
-    char * finish = strchr(start, ',');
+  while (*start != '\0') {
+    const char * finish = strchr(start, ',');
     if (finish == NULL) {
-      strcpy(pins[ii].name, start);
-      ++ii;
+      if (!isValidPinName(start, 0)) {
+        return -1;
+      }
+      ii++;
       break;
     }
-    strncpy(pins[ii].name, start, finish-start);
-    pins[ii].name[finish-start] = '\0';
+    if (!isValidPinName(start, finish-start)) {
+      return -1;
+    }
+    ii++;
+    start = finish + 1;
+  }
+  if (ii > MAX_PINS) {
+    return -1;
+  }
+  return ii;
+}
+
+// setPins sets pin names in the Pin array from comma-separated names, clears unused pins and returns the size in use.
+// NB: Silently ignores invalid pins, which should have been checked previously.
+int setPins(const char * names, Pin * pins) {
+  const char *start = names;
+  int ii = 0;
+  while (*start != '\0' && ii < MAX_PINS) {
+    const char * finish = strchr(start, ',');
+    if (finish == NULL) {
+      if (isValidPinName(start, 0)) {
+        strcpy(pins[ii].name, start);
+        ii++;
+      }
+      break;
+    }
+    size_t len = finish - start;
+    if (isValidPinName(start, len)) {
+      strncpy(pins[ii].name, start, len);
+      pins[ii].name[len] = '\0';
+      ii++;
+    }
     start = finish + 1;
   }
   int sz = ii;
@@ -993,14 +1053,22 @@ bool config() {
     changed = true;
   }
   if (extractJson(reply, "ip", param) && param != Config.inputs) {
-    padCopy(Config.inputs, param.c_str(), IO_SIZE);
-    log(logDebug, "Inputs changed: %s", Config.inputs);
-    changed = true;
+    if (checkPins(param.c_str()) >= 0) {
+      padCopy(Config.inputs, param.c_str(), IO_SIZE);
+      log(logDebug, "Inputs changed: %s", Config.inputs);
+      changed = true;
+    } else {
+      log(logWarning, "Invalid inputs: %s", param.c_str());
+    }
   }
   if (extractJson(reply, "op", param) && param != Config.outputs) {
-    padCopy(Config.outputs, param.c_str(), IO_SIZE);
-    log(logDebug, "Outputs changed: %s", Config.outputs);
-    changed = true;
+    if (checkPins(param.c_str()) >= 0) {
+      padCopy(Config.outputs, param.c_str(), IO_SIZE);
+      log(logDebug, "Outputs changed: %s", Config.outputs);
+      changed = true;
+    } else {
+      log(logWarning, "Invalid outputs: %s", param.c_str());
+    }
   }
 
   if (changed) {
