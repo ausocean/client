@@ -905,7 +905,7 @@ bool request(RequestType req, Pin * inputs, Pin * outputs, bool * reconfig, Stri
     sprintf(path, "/act?vn=%d&ma=%s&dk=%s&ut=%ld&md=%s", VERSION, MacAddress, Config.dkey, ut, Mode.c_str());
     break;
   case RequestVars:
-    sprintf(path, "/vars?vn=%d&ma=%s&dk=%s&ut=%ld&md=%s", VERSION, MacAddress, Config.dkey, ut, Mode.c_str());
+    sprintf(path, "/vars?vn=%d&ma=%s&dk=%s&ut=%ld", VERSION, MacAddress, Config.dkey, ut);
     break;
   }
 
@@ -1337,7 +1337,7 @@ bool run(int* varsum) {
         Mode = mode::LowVoltageAlarm;
         log(logDebug, "mode=%s", Mode);
         // Notfiy the service that we're alarmed.
-        if (!(wifiBegin() && request(RequestVars, NULL, NULL, &reconfig, reply))) {
+        if (!(wifiBegin() && request(RequestPoll, NULL, NULL, &reconfig, reply))) {
           log(logWarning, "Failed to notify service of low voltage alarm");
 	}
         cyclePin(STATUS_PIN, statusVoltageAlarm);
