@@ -1269,7 +1269,7 @@ bool run(int* varsum) {
         Mode = mode::LowVoltageAlarm;
         log(logDebug, "mode=%s", Mode);
         // Notfiy the service that we're alarmed.
-        if (!(wifiBegin() && request(RequestPoll, NULL, NULL, &reconfig, reply))) {
+        if (!(wifiBegin() && request(RequestVars, NULL, NULL, &reconfig, reply))) {
           log(logWarning, "Failed to notify service of low voltage alarm");
 	}
         cyclePin(STATUS_PIN, statusVoltageAlarm);
