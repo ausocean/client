@@ -1231,6 +1231,20 @@ bool pause(bool ok, unsigned long pulsed, long * lag) {
   return ok;
 }
 
+// updateMode updates the global Mode and notifies the service via a config request.
+bool updateMode(const char* mode) {
+  String reply;
+  bool reconfig;
+
+  log(logDebug, "mode=%s", mode);
+  Mode = mode;
+  if (wifiBegin() && request(RequestConfig, NULL, NULL, &reconfig, reply)) {
+    return true;
+  }
+  log(logWarning, "Failed to notify service of mode");
+  return false;
+}
+
 // run should be called from loop until it returns true, e.g., 
 //  while (!run(&varsum)) {
 //    ;
@@ -1334,12 +1348,7 @@ bool run(int* varsum) {
       if (!XPin[xAlarmed]) {
         // low voltage; raise the alarm and turn off WiFi!
         log(logWarning, "Low voltage alarm!");
-        Mode = mode::LowVoltageAlarm;
-        log(logDebug, "mode=%s", Mode.c_str());
-        // Notfiy the service that we're alarmed.
-        if (!(wifiBegin() && request(RequestConfig, NULL, NULL, &reconfig, reply))) {
-          log(logWarning, "Failed to notify service of low voltage alarm");
-        }
+        updateMode(mode::LowVoltageAlarm);
         cyclePin(STATUS_PIN, statusVoltageAlarm);
         writeAlarm(true, true);
         wifiControl(false);
@@ -1351,7 +1360,7 @@ bool run(int* varsum) {
         return pause(false, pulsed, &lag);
       }
       log(logInfo, "Low voltage alarm cleared");
-      Mode = mode::Normal;
+      updateMode(mode::Normal);
       writeAlarm(false, true);
     }
     if (XPin[xBat] > Config.vars[pvPeakVoltage]) {
