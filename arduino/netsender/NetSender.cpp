@@ -210,6 +210,11 @@ typedef enum logLevel {
 
 const char* logLevels[] = {"", "Error", "Warning", "Info", "Debug"};
 
+namespace mode {
+  constexpr const char* Normal = "Normal";
+  constexpr const char* LowVoltageAlarm = "LowVoltageAlarm";
+}
+
 // Exported globals.
 Configuration Config;
 ReaderFunc ExternalReader = NULL;
@@ -225,6 +230,7 @@ static unsigned long Time = 0;
 static unsigned long AlarmedTime = 0;
 static int NetworkFailures = 0;
 static int SimulatedBat = 0;
+static String Mode = mode::Normal;
 
 // Forward declarations.
 void restart(bootReason, bool);
@@ -889,8 +895,8 @@ bool request(RequestType req, Pin * inputs, Pin * outputs, bool * reconfig, Stri
 
   switch (req) {
   case RequestConfig:
-    sprintf(path, "/config?vn=%d&ma=%s&dk=%s&la=%d.%d.%d.%d&ut=%ld", VERSION, MacAddress, Config.dkey,
-            LocalAddress[0], LocalAddress[1], LocalAddress[2], LocalAddress[3], ut);
+    sprintf(path, "/config?vn=%d&ma=%s&dk=%s&la=%d.%d.%d.%d&ut=%ld&md=%s", VERSION, MacAddress, Config.dkey,
+            LocalAddress[0], LocalAddress[1], LocalAddress[2], LocalAddress[3], ut, Mode.c_str());
     break;
   case RequestPoll:
     sprintf(path, "/poll?vn=%d&ma=%s&dk=%s&ut=%ld", VERSION, MacAddress, Config.dkey, ut);
@@ -940,7 +946,7 @@ bool request(RequestType req, Pin * inputs, Pin * outputs, bool * reconfig, Stri
   }
 
   // Since version 138 and later, poll requests also return output values.
-  if (req == RequestPoll || req == RequestAct) {
+  if ((outputs != NULL) && (req == RequestPoll || req == RequestAct)) {
     bool found = false;
     for (int ii = 0; ii < MAX_PINS && outputs[ii].name[0] != '\0'; ii++) {
       if (extractJson(reply, outputs[ii].name, param)) {
@@ -1071,28 +1077,40 @@ bool config() {
     cyclePin(STATUS_PIN, statusConfigUpdate);
   }
   Configured = true;
+  Mode = mode::Normal;
   return true;
 }
 
 // Retrieve vars from data host, return the persistent vars and
 // set changed to true if a persistent var has changed.
-// Transient vars, such as "id" are not saved.
+// Transient vars, such as "id" or "mode" are not saved.
 // Missing persistent vars default to 0, except for peak voltage and auto restart.
 bool getVars(int vars[MAX_VARS], bool* changed) {
-  String reply, error, id, param;
+  String reply, error, id, mode, param, var;
   bool reconfig;
   *changed = false;
 
   if (!request(RequestVars, NULL, NULL, &reconfig, reply) || extractJson(reply, "er", param)) {
     return false;
   }
-  bool hasId = extractJson(reply, "id", id);
+  auto hasId = extractJson(reply, "id", id);
   if (hasId) log(logDebug, "id=%s", id.c_str());
+
+  if (hasId) {
+    var = id + ".mode";
+  } else {
+    var = "mode";
+  }
+  auto hasMode = extractJson(reply, var.c_str(), mode);
+  if (hasMode) {
+    log(logDebug, "mode=%s", mode.c_str());
+    Mode = mode;
+  }
 
   for  (int ii = 0; ii < MAX_VARS; ii++) {
     int val = 0;
     if (hasId) {
-      String var = id + '.' + String(PvNames[ii]);
+      var = id + '.' + String(PvNames[ii]);
       if (extractJson(reply, var.c_str(), param)) {
         val = param.toInt();
       }
@@ -1213,6 +1231,20 @@ bool pause(bool ok, unsigned long pulsed, long * lag) {
   return ok;
 }
 
+// updateMode updates the global Mode and notifies the service via a config request.
+bool updateMode(const char* mode) {
+  String reply;
+  bool reconfig;
+
+  log(logDebug, "mode=%s", mode);
+  Mode = mode;
+  if (wifiBegin() && request(RequestConfig, NULL, NULL, &reconfig, reply)) {
+    return true;
+  }
+  log(logWarning, "Failed to notify service of mode");
+  return false;
+}
+
 // run should be called from loop until it returns true, e.g., 
 //  while (!run(&varsum)) {
 //    ;
@@ -1316,9 +1348,9 @@ bool run(int* varsum) {
       if (!XPin[xAlarmed]) {
         // low voltage; raise the alarm and turn off WiFi!
         log(logWarning, "Low voltage alarm!");
+        updateMode(mode::LowVoltageAlarm);
         cyclePin(STATUS_PIN, statusVoltageAlarm);
         writeAlarm(true, true);
-        // Wifi should already be off but just in case.
         wifiControl(false);
       }
       return pause(false, pulsed, &lag);
@@ -1328,6 +1360,7 @@ bool run(int* varsum) {
         return pause(false, pulsed, &lag);
       }
       log(logInfo, "Low voltage alarm cleared");
+      updateMode(mode::Normal);
       writeAlarm(false, true);
     }
     if (XPin[xBat] > Config.vars[pvPeakVoltage]) {
