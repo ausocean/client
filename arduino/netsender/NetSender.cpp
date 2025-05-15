@@ -1335,7 +1335,7 @@ bool run(int* varsum) {
         // low voltage; raise the alarm and turn off WiFi!
         log(logWarning, "Low voltage alarm!");
         Mode = mode::LowVoltageAlarm;
-        log(logDebug, "mode=%s", Mode);
+        log(logDebug, "mode=%s", Mode.c_str());
         // Notfiy the service that we're alarmed.
         if (!(wifiBegin() && request(RequestConfig, NULL, NULL, &reconfig, reply))) {
           log(logWarning, "Failed to notify service of low voltage alarm");
