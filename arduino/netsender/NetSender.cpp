@@ -36,27 +36,29 @@
 #include "nonarduino.h"
 #endif
 
+#include "pin_safety.h"
 #include "NetSender.h"
 
 namespace NetSender {
 
 // Hardware constants.
 #ifdef ESP8266
-#define ALARM_PIN              0    // GPIO pin corresponding to the alarm LED (red).
-#define ALARM_LEVEL            LOW  // Level indicating an alarm state.
-#define NAV_PIN                2    // GPIO pin corresponding to nav light (yellow).
-#define STATUS_PIN             2    // GPIO pin corresponding to status LED (blue).
-#define BAT_PIN                0    // Analog pin that measures battery voltage.
-#define DUTY_CYCLE             150  // Duty cycle used when flashing STATUS_PIN.
+#define DUTY_CYCLE  150  // Duty cycle used when flashing STATUS_PIN.
+#define ALARM_LEVEL LOW  // Level indicating an alarm state.
+DEFINE_PIN(ALARM_PIN,  0, PinSpec::INPUT_MODE, PinSpec::INPUT_PULLUP_MODE, PinSpec::OUTPUT_MODE, PinSpec::BOOTSTRAP_MUST_BE_LOW); // GPIO pin corresponding to the alarm LED (red).
+DEFINE_PIN(NAV_PIN,    2, PinSpec::INPUT_MODE, PinSpec::INPUT_PULLUP_MODE, PinSpec::OUTPUT_MODE, PinSpec::BOOTSTRAP_MUST_BE_HIGH); // GPIO pin corresponding to nav light (yellow).
+DEFINE_PIN(STATUS_PIN, 4, PinSpec::INPUT_MODE, PinSpec::INPUT_PULLUP_MODE, PinSpec::OUTPUT_MODE); // GPIO pin corresponding to status LED (blue).
+DEFINE_PIN(BAT_PIN,    0, PinSpec::INPUT_MODE, PinSpec::INPUT_PULLUP_MODE, PinSpec::OUTPUT_MODE, PinSpec::BOOTSTRAP_MUST_BE_LOW);  // Analog pin that measures battery voltage.
 #endif
 #if defined ESP32 || defined __linux__
-#define ALARM_PIN              5    // GPIO pin corresponding to the alarm LED (red).
-#define ALARM_LEVEL            HIGH // Level indicating an alarm state.
-#define NAV_PIN                19   // GPIO pin corresponding to nav light (yellow).
-#define STATUS_PIN             23   // GPIO pin corresponding to status LED (blue).
-#define BAT_PIN                4    // Analog pin that measures battery voltage.
-#define DUTY_CYCLE             50   // Duty cycle used when flashing STATUS_PIN.
+#define DUTY_CYCLE  50   // Duty cycle used when flashing STATUS_PIN.
+#define ALARM_LEVEL HIGH // Level indicating an alarm state.
+DEFINE_PIN(ALARM_PIN,  5,  PinSpec::INPUT_MODE, PinSpec::INPUT_PULLUP_MODE, PinSpec::OUTPUT_MODE, PinSpec::OUTPUTS_PWM_AT_BOOT); // GPIO pin corresponding to the alarm LED (red).
+DEFINE_PIN(NAV_PIN,    19, PinSpec::INPUT_MODE, PinSpec::INPUT_PULLUP_MODE, PinSpec::OUTPUT_MODE); // GPIO pin corresponding to nav light (yellow).
+DEFINE_PIN(STATUS_PIN, 23, PinSpec::INPUT_MODE, PinSpec::INPUT_PULLUP_MODE, PinSpec::OUTPUT_MODE); // GPIO pin corresponding to status LED (blue).
+DEFINE_PIN(BAT_PIN,    4,  PinSpec::INPUT_MODE, PinSpec::INPUT_PULLUP_MODE, PinSpec::OUTPUT_MODE);  // Analog pin that measures battery voltage.
 #endif
+
 #define NUM_RELAYS             4    // Number of relays.
 
 // Default values.
@@ -343,13 +345,13 @@ void resetPowerPins(bool alarm) {
     if (alarm) {
       level = LOW;
     }
-    pinMode(PowerPins[ii].pin, OUTPUT);
+    pinMode_runtime(PowerPins[ii].pin, OUTPUT);
     digitalWrite(PowerPins[ii].pin, level);
     log(logDebug, "Set power pin: D%d %s", PowerPins[ii].pin, fmtLevel(level));
   }
 #ifdef ESP32
   level = alarm ? ALARM_LEVEL : !ALARM_LEVEL;
-  pinMode(ALARM_PIN, OUTPUT);
+  pinMode_constexpr<ALARM_PIN, OUTPUT>();
   digitalWrite(ALARM_PIN, level);
   log(logDebug, "Set alarm pin: D%d %s", ALARM_PIN, fmtLevel(level));
 #endif
@@ -363,7 +365,7 @@ void initPins(bool startup) {
   for (int ii = 0, sz = setPins(Config.inputs, pins); ii < sz; ii++) {
     if (pins[ii].name[0] == 'D' || pins[ii].name[0] == 'A') {
       int pn = atoi(pins[ii].name + 1);
-      pinMode(pn, INPUT);
+      pinMode_runtime(pn, INPUT);
       log(logDebug, "Set %s as INPUT", pins[ii].name);
     }
   }
@@ -372,7 +374,11 @@ void initPins(bool startup) {
     if (pins[ii].name[0] == 'D') {
       int pn = atoi(pins[ii].name + 1);
       log(logDebug, "Set %s as OUTPUT", pins[ii].name);
-      pinMode(pn, OUTPUT);
+      if(!pinMode_runtime(pn, OUTPUT)){
+        // NOTE: we might want to set an error mode here
+        // or send back an error code ?
+        log(logError, "Failed to set %s as OUTPUT", pins[ii].name);
+      };
     }
   }
 
@@ -835,9 +841,9 @@ void writeVars(int vars[MAX_VARS]) {
 // init should be called from setup once
 void init(void) {
   Serial.begin(115200);
-  pinMode(ALARM_PIN, OUTPUT);
-  pinMode(NAV_PIN, OUTPUT);
-  pinMode(STATUS_PIN, OUTPUT);
+  pinMode_constexpr<ALARM_PIN, OUTPUT>();
+  pinMode_constexpr<NAV_PIN, OUTPUT>();
+  pinMode_constexpr<STATUS_PIN, OUTPUT>();
 #ifdef ESP8266
   digitalWrite(STATUS_PIN, HIGH);
 #endif
