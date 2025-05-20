@@ -1345,23 +1345,35 @@ bool run(int* varsum) {
     log(logDebug, "Checking battery voltage");
     XPin[xBat] = readPin(&pin);
     if (XPin[xBat] < Config.vars[pvAlarmVoltage]) {
+      log(logWarning, "Battery is below alarm voltage!");
+      log(logDebug, "Checking Alarmed pin");
       if (!XPin[xAlarmed]) {
+        log(logWarning, "Alarmed pin is not currently alarmed, writing alarm pin, and changing mode to LowVoltageAlarm");
         // low voltage; raise the alarm and turn off WiFi!
-        log(logWarning, "Low voltage alarm!");
         updateMode(mode::LowVoltageAlarm);
         cyclePin(STATUS_PIN, statusVoltageAlarm);
         writeAlarm(true, true);
         wifiControl(false);
+      } else {
+        log(logDebug, "Alarmed pin is currently alarmed, no action required");
       }
       return pause(false, pulsed, &lag);
     }
+    log(logDebug, "Checking Alarmed pin");
     if (XPin[xAlarmed]) {
+      log(logDebug, "Currently alarmed, checking voltage against recovery voltage");
       if (XPin[xBat] < Config.vars[pvAlarmRecoveryVoltage]) {
         return pause(false, pulsed, &lag);
       }
       log(logInfo, "Low voltage alarm cleared");
       updateMode(mode::Normal);
       writeAlarm(false, true);
+    } else {
+      log(logDebug, "Alarmed pin is not currently alarmed");
+      if (Mode == mode::LowVoltageAlarm) {
+        log(logDebug, "Mode is currently LowVoltageAlarm but it shouldn't be, changing to Normal");
+        updateMode(mode::Normal);
+      }
     }
     if (XPin[xBat] > Config.vars[pvPeakVoltage]) {
       log(logWarning, "High voltage, pin value: %d, peak voltage: %d", XPin[xBat], Config.vars[pvPeakVoltage]);
