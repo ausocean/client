@@ -1235,13 +1235,14 @@ bool pause(bool ok, unsigned long pulsed, long * lag) {
 bool updateMode(const char* mode) {
   String reply;
   bool reconfig;
-
-  log(logDebug, "mode=%s", mode);
+  auto prevMode = Mode;
   Mode = mode;
   if (wifiBegin() && request(RequestConfig, NULL, NULL, &reconfig, reply)) {
+    log(logDebug, "updated mode=%s", mode);
     return true;
   }
-  log(logWarning, "Failed to notify service of mode");
+  Mode = prevMode;
+  log(logWarning, "Failed to notify service of mode, mode unchanged");
   return false;
 }
 
