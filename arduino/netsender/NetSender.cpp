@@ -210,8 +210,9 @@ typedef enum logLevel {
 
 const char* logLevels[] = {"", "Error", "Warning", "Info", "Debug"};
 
-namespace mode {
-  constexpr const char* Normal = "Normal";
+// Device errors, used to convey abnormal states.
+namespace error {
+  constexpr const char* None = "";
   constexpr const char* LowVoltageAlarm = "LowVoltageAlarm";
 }
 
@@ -230,7 +231,7 @@ static unsigned long Time = 0;
 static unsigned long AlarmedTime = 0;
 static int NetworkFailures = 0;
 static int SimulatedBat = 0;
-static String Mode = mode::Normal;
+static String Error = error::None;
 
 // Forward declarations.
 void restart(bootReason, bool);
@@ -880,6 +881,7 @@ bool httpRequest(String url, String body, String& reply) {
 }
 
 // Issue a single request, writing polled values to 'inputs' and actuated values to 'outputs'.
+// Config requests (and only config requests) communicate the device mode and error.
 // Sets 'reconfig' true if reconfiguration is required, false otherwise.
 // Side effects: 
 //   Updates VarSum global when differs from the varsum ("vs") parameter.
@@ -895,8 +897,8 @@ bool request(RequestType req, Pin * inputs, Pin * outputs, bool * reconfig, Stri
 
   switch (req) {
   case RequestConfig:
-    sprintf(path, "/config?vn=%d&ma=%s&dk=%s&la=%d.%d.%d.%d&ut=%ld&md=%s", VERSION, MacAddress, Config.dkey,
-            LocalAddress[0], LocalAddress[1], LocalAddress[2], LocalAddress[3], ut, Mode.c_str());
+    sprintf(path, "/config?vn=%d&ma=%s&dk=%s&la=%d.%d.%d.%d&ut=%ld&md=Normal&er=%s", VERSION, MacAddress, Config.dkey,
+            LocalAddress[0], LocalAddress[1], LocalAddress[2], LocalAddress[3], ut, Error.c_str());
     break;
   case RequestPoll:
     sprintf(path, "/poll?vn=%d&ma=%s&dk=%s&ut=%ld", VERSION, MacAddress, Config.dkey, ut);
@@ -1077,13 +1079,12 @@ bool config() {
     cyclePin(STATUS_PIN, statusConfigUpdate);
   }
   Configured = true;
-  Mode = mode::Normal;
   return true;
 }
 
 // Retrieve vars from data host, return the persistent vars and
 // set changed to true if a persistent var has changed.
-// Transient vars, such as "id" or "mode" are not saved.
+// Transient vars, such as "id" or "error" are not saved.
 // Missing persistent vars default to 0, except for peak voltage and auto restart.
 bool getVars(int vars[MAX_VARS], bool* changed) {
   String reply, error, id, mode, param, var;
@@ -1096,15 +1097,19 @@ bool getVars(int vars[MAX_VARS], bool* changed) {
   auto hasId = extractJson(reply, "id", id);
   if (hasId) log(logDebug, "id=%s", id.c_str());
 
-  if (hasId) {
-    var = id + ".mode";
-  } else {
-    var = "mode";
-  }
+  var = hasId ? id + ".mode" : "mode";
   auto hasMode = extractJson(reply, var.c_str(), mode);
   if (hasMode) {
     log(logDebug, "mode=%s", mode.c_str());
-    Mode = mode;
+   // TODO: Implement server-initiated mode changes.
+  }
+
+  var = hasId ? id + ".error" : "error";
+  auto hasError = extractJson(reply, var.c_str(), error);
+  if (hasError) {
+    // Server-initiated error change, useful for testing.
+    log(logDebug, "error=%s", error.c_str());
+    error = Error;
   }
 
   for  (int ii = 0; ii < MAX_VARS; ii++) {
@@ -1231,18 +1236,18 @@ bool pause(bool ok, unsigned long pulsed, long * lag) {
   return ok;
 }
 
-// updateMode updates the global Mode and notifies the service via a config request.
-bool updateMode(const char* mode) {
+// setError notifies the service of an error and updates the Error global upon success.
+bool setError(const char* error) {
   String reply;
   bool reconfig;
-  auto prevMode = Mode;
-  Mode = mode;
+  auto prevError = Error;
+  Error = error;
   if (wifiBegin() && request(RequestConfig, NULL, NULL, &reconfig, reply)) {
-    log(logDebug, "updated mode=%s", mode);
+    log(logDebug, "error=%s", error);
     return true;
   }
-  Mode = prevMode;
-  log(logWarning, "Failed to notify service of mode, mode unchanged");
+  Error = prevError;
+  log(logWarning, "Failed to notify service of error, error unchanged");
   return false;
 }
 
@@ -1347,8 +1352,8 @@ bool run(int* varsum) {
     XPin[xBat] = readPin(&pin);
     if (XPin[xBat] < Config.vars[pvAlarmVoltage]) {
       log(logWarning, "Battery is below alarm voltage!");
-      if (Mode != mode::LowVoltageAlarm) {
-        updateMode(mode::LowVoltageAlarm);
+      if (Error != error::LowVoltageAlarm) {
+        setError(error::LowVoltageAlarm);
       }
       log(logDebug, "Checking Alarmed pin");
       if (!XPin[xAlarmed]) {
@@ -1368,13 +1373,13 @@ bool run(int* varsum) {
         return pause(false, pulsed, &lag);
       }
       log(logInfo, "Low voltage alarm cleared");
-      updateMode(mode::Normal);
+      setError(error::None);
       writeAlarm(false, true);
     } else {
       log(logDebug, "Alarmed pin is not currently alarmed");
-      if (Mode == mode::LowVoltageAlarm) {
-        log(logDebug, "Mode is currently LowVoltageAlarm but it shouldn't be, changing to Normal");
-        updateMode(mode::Normal);
+      if (Error == error::LowVoltageAlarm) {
+        log(logDebug, "Error is currently LowVoltageAlarm but it shouldn't be; changing to None");
+        setError(error::None);
       }
     }
     if (XPin[xBat] > Config.vars[pvPeakVoltage]) {
