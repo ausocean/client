@@ -1347,11 +1347,13 @@ bool run(int* varsum) {
     XPin[xBat] = readPin(&pin);
     if (XPin[xBat] < Config.vars[pvAlarmVoltage]) {
       log(logWarning, "Battery is below alarm voltage!");
+      if (Mode != mode::LowVoltageAlarm) {
+        updateMode(mode::LowVoltageAlarm);
+      }
       log(logDebug, "Checking Alarmed pin");
       if (!XPin[xAlarmed]) {
         log(logWarning, "Alarmed pin is not currently alarmed, writing alarm pin, and changing mode to LowVoltageAlarm");
         // low voltage; raise the alarm and turn off WiFi!
-        updateMode(mode::LowVoltageAlarm);
         cyclePin(STATUS_PIN, statusVoltageAlarm);
         writeAlarm(true, true);
         wifiControl(false);
