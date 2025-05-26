@@ -1262,6 +1262,7 @@ bool run(int* varsum) {
   unsigned long now = millis();
   int vars[MAX_VARS];
   bool changed;
+  bool restarted = (Time == 0);
 
   // Measure lag to maintain accuracy between cycles.
   if (Time > 0 && now > Time) {
@@ -1275,26 +1276,25 @@ bool run(int* varsum) {
 
   // Handle reboot due to alarm.
   if (Config.boot == bootAlarm) {
-    log(logInfo, "Restarted due to alarm — checking for var updates.");
+    log(logInfo, "Restarted due to alarm.");
+  }
 
-    // Mark the boot as handled so we don’t do this again.
-    Config.boot = bootClear;
-
-    // Attempt to refresh vars in case the recent alarm was due to operator error.
+  if (restarted) {
+    log(logInfo, "Checking for vars after restart.");
     bool gotVars = false;
     if (wifiBegin()) {
       gotVars = getVars(vars, &changed);
       if (gotVars) {
         if (changed) {
-          log(logDebug, "Persistent variable(s) changed after alarm recovery.");
+          log(logDebug, "Persistent vars changed after restart.");
           writeVars(vars);
         }
         *varsum = VarSum;
       } else {
-        log(logWarning, "Failed to get vars after alarm recovery.");
+        log(logWarning, "Failed to get vars after restart.");
       }
     } else {
-      log(logWarning, "Failed to connect to Wi-Fi during alarm recovery.");
+      log(logWarning, "Failed to connect to Wi-Fi after restart.");
     }
 
     // Always turn off Wi-Fi afterward to ensure stable pin reads and save power.
@@ -1352,15 +1352,14 @@ bool run(int* varsum) {
       }
       log(logDebug, "Checking Alarmed pin");
       if (!XPin[xAlarmed]) {
-        log(logWarning, "Alarmed pin is not currently alarmed, writing alarm pin, and changing mode to LowVoltageAlarm");
-        // low voltage; raise the alarm and turn off WiFi!
+        log(logWarning, "Alarmed pin is not currently alarmed, writing alarm pin");
+        // low voltage; raise the alarm.
         cyclePin(STATUS_PIN, statusVoltageAlarm);
         writeAlarm(true, true);
-        wifiControl(false);
       } else {
         log(logDebug, "Alarmed pin is currently alarmed, no action required");
       }
-      return pause(false, pulsed, &lag);
+      return pause(false, pulsed, &lag); // Turns off WiFi.
     }
     log(logDebug, "Checking Alarmed pin");
     if (XPin[xAlarmed]) {
@@ -1385,6 +1384,8 @@ bool run(int* varsum) {
     XPin[xBat] = -1;
     log(logDebug, "Skipped voltage check");
   }
+
+  wifiControl(false); // Ensure WiFi is off before taking measurements.
 
   // Read inputs, if any.
   // NB: We do this before we are connected to the network.
