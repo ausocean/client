@@ -348,7 +348,11 @@ func (ns *Sender) setModeAndError(t *testing.T, mode, error string) {
 	if vs != -1 {
 		t.Errorf("Expected -1 for vs, got %d", vs)
 	}
-	vars, err := ns.Vars()
+	_, err := ns.Config() // Send mode and error to the service.
+	if err != nil {
+		t.Errorf("ns.Config failed with error %v", err)
+	}
+	vars, err := ns.Vars() // Get mode and error from the service.
 	if err != nil {
 		t.Errorf("ns.Vars failed with error %v", err)
 	}
