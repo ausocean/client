@@ -199,15 +199,6 @@ PowerPin PowerPins[] = {
 // Variable types, which include both persistent vars and vars associated with power pins. PulseSuppress is included for convenience.
 const char* VarTypes = "{\"LogLevel\":\"uint\", \"Pulses\":\"uint\", \"PulseWidth\":\"uint\", \"PulseDutyCycle\":\"uint\", \"PulseCycle\":\"uint\", \"AutoRestart\":\"uint\", \"AlarmPeriod\":\"uint\", \"AlarmNetwork\":\"uint\", \"AlarmVoltage\":\"uint\", \"AlarmRecoveryVoltage\":\"uint\", \"PeakVoltage\":\"uint\", \"Power0\":\"bool\", \"Power1\":\"bool\", \"Power2\":\"bool\", \"Power3\":\"bool\", \"PulseSuppress\":\"bool\"}";
 
-typedef enum logLevel {
-  logNone    = 0,
-  logError   = 1,
-  logWarning = 2,
-  logInfo    = 3,
-  logDebug   = 4,
-  logMax     = 5
-} LogLevel;
-
 const char* logLevels[] = {"", "Error", "Warning", "Info", "Debug"};
 
 // Device errors, used to convey abnormal states.
@@ -221,6 +212,7 @@ Configuration Config;
 ReaderFunc ExternalReader = NULL;
 ReaderFunc BinaryReader = NULL;
 int VarSum = 0;
+HandlerManager Handlers;
 
 // Other globals.
 static int XPin[xMax] = {100000, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0, 0, 0};
@@ -232,6 +224,7 @@ static unsigned long AlarmedTime = 0;
 static int NetworkFailures = 0;
 static int SimulatedBat = 0;
 static String Error = error::None;
+static BaseHandler *Handler;
 
 // Forward declarations.
 void restart(bootReason, bool);
@@ -880,14 +873,16 @@ bool httpRequest(String url, String body, String& reply) {
   return ok;
 }
 
+// Online request handler, i.e., Normal mode.
 // Issue a single request, writing polled values to 'inputs' and actuated values to 'outputs'.
-// Config requests (and only config requests) communicate the device mode and error.
+// Config requests (and only config requests) communicate the device mode and error,
+// where the mode corresponds to the active request handler.
 // Sets 'reconfig' true if reconfiguration is required, false otherwise.
 // Side effects: 
 //   Updates VarSum global when differs from the varsum ("vs") parameter.
 //   Sets Configured global to false for update and alarm requests.
 //   Updates, enters debug mode or alarm mode, or reboots according to the response code ("rc").
-bool request(RequestType req, Pin * inputs, Pin * outputs, bool * reconfig, String& reply) {
+bool OnlineHandler::request(RequestType req, Pin * inputs, Pin * outputs, bool * reconfig, String& reply) {
   char path[MAX_PATH];
   String param;
   String body;
@@ -897,8 +892,8 @@ bool request(RequestType req, Pin * inputs, Pin * outputs, bool * reconfig, Stri
 
   switch (req) {
   case RequestConfig:
-    sprintf(path, "/config?vn=%d&ma=%s&dk=%s&la=%d.%d.%d.%d&ut=%ld&md=Normal&er=%s", VERSION, MacAddress, Config.dkey,
-            LocalAddress[0], LocalAddress[1], LocalAddress[2], LocalAddress[3], ut, Error.c_str());
+    sprintf(path, "/config?vn=%d&ma=%s&dk=%s&la=%d.%d.%d.%d&ut=%ld&md=%s&er=%s", VERSION, MacAddress, Config.dkey,
+            LocalAddress[0], LocalAddress[1], LocalAddress[2], LocalAddress[3], ut, Handler->name(), Error.c_str());
     break;
   case RequestPoll:
     sprintf(path, "/poll?vn=%d&ma=%s&dk=%s&ut=%ld", VERSION, MacAddress, Config.dkey, ut);
@@ -926,7 +921,7 @@ bool request(RequestType req, Pin * inputs, Pin * outputs, bool * reconfig, Stri
     }
   }
 
-  if (httpRequest(String(SVC_URL)+String(path), body, reply)) {
+  if (connect() && httpRequest(String(SVC_URL)+String(path), body, reply)) {
     if (XPin[xAlarmed]) {
       writeAlarm(false, true); // Reset alarm.
     }
@@ -1013,6 +1008,23 @@ bool request(RequestType req, Pin * inputs, Pin * outputs, bool * reconfig, Stri
   return true;
 }
 
+// Connect to WiFi, unless already connected.
+bool OnlineHandler::connect() {
+  if (!connected) {
+    connected = wifiBegin();
+  }
+  return connected;
+}
+
+// Disconnect from WiFi, unless already disconnected.
+void OnlineHandler::disconnect() {
+  if (!connected) {
+    return;
+  }
+  wifiControl(false);
+  connected = false;
+}
+
 // request config, and return true upon success, or false otherwise
 // Side effects:
 //   Sets Configured global to true upon success.
@@ -1028,7 +1040,7 @@ bool config() {
   pins[0].data = (byte*)VarTypes;
   pins[1].name[0] = '\0';
 
-  if (!request(RequestConfig, pins, NULL, &reconfig, reply) || extractJson(reply, "er", param)) {
+  if (!Handler->request(RequestConfig, pins, NULL, &reconfig, reply) || extractJson(reply, "er", param)) {
     cyclePin(STATUS_PIN, statusConfigError);
     return false;
   } 
@@ -1091,7 +1103,7 @@ bool getVars(int vars[MAX_VARS], bool* changed) {
   bool reconfig;
   *changed = false;
 
-  if (!request(RequestVars, NULL, NULL, &reconfig, reply) || extractJson(reply, "er", param)) {
+  if (!Handler->request(RequestVars, NULL, NULL, &reconfig, reply) || extractJson(reply, "er", param)) {
     return false;
   }
   auto hasId = extractJson(reply, "id", id);
@@ -1100,8 +1112,13 @@ bool getVars(int vars[MAX_VARS], bool* changed) {
   var = hasId ? id + ".mode" : "mode";
   auto hasMode = extractJson(reply, var.c_str(), mode);
   if (hasMode) {
-    log(logDebug, "mode=%s", mode.c_str());
-   // TODO: Implement server-initiated mode changes.
+    auto h = Handlers.set(mode.c_str());
+    if (h == NULL) {
+      log(logWarning, "Invalid mode %s", mode.c_str());
+    } else if (mode != h->name()) {
+      log(logDebug, "updated mode=%s", mode.c_str());
+      Handler = h;
+    } // else mode unchanged
   }
 
   var = hasId ? id + ".error" : "error";
@@ -1201,6 +1218,11 @@ void init(void) {
   WiFi.macAddress(mac);
   fmtMacAddress(mac, MacAddress);
   WiFi.mode(WIFI_MODE_NULL);
+
+  // Add handlers and set active handler.
+  Handlers.add(new OnlineHandler);
+  Handlers.add(new OfflineHandler);
+  Handlers.set(mode::Online); // ToDo: Get mode from non-volatile memory.
 }
 
 // Pause to maintain timing accuracy, adjusting the timing lag in the process.
@@ -1209,7 +1231,7 @@ void init(void) {
 // since timing accuracy is moot. If pulsing, we pause for the active time remaining this cycle,
 // unless we're out of time.
 bool pause(bool ok, unsigned long pulsed, long * lag) {
-  wifiControl(false);
+  Handler->disconnect();
 
   if (!ok && pulsed == 0) {
     log(logInfo, "Retrying in %ds", RETRY_PERIOD);
@@ -1242,7 +1264,7 @@ bool setError(const char* error) {
   bool reconfig;
   auto prevError = Error;
   Error = error;
-  if (wifiBegin() && request(RequestConfig, NULL, NULL, &reconfig, reply)) {
+  if (Handler->request(RequestConfig, NULL, NULL, &reconfig, reply)) {
     log(logDebug, "error=%s", error);
     return true;
   }
@@ -1255,7 +1277,8 @@ bool setError(const char* error) {
 //  while (!run(&varsum)) {
 //    ;
 //  }
-// May return false while either connected to WiFi or not.
+// Connecting to WiFi is handled by the request handler (if required),
+// but we call disconnect here to ensure WiFi is not left on.
 // NB: pulse suppression must be re-enabled each cycle via the X14 pin.
 bool run(int* varsum) {
   log(logDebug, "---- starting run cycle ----");
@@ -1286,24 +1309,18 @@ bool run(int* varsum) {
 
   if (restarted) {
     log(logInfo, "Checking for vars after restart.");
-    bool gotVars = false;
-    if (wifiBegin()) {
-      gotVars = getVars(vars, &changed);
-      if (gotVars) {
-        if (changed) {
-          log(logDebug, "Persistent vars changed after restart.");
-          writeVars(vars);
-        }
-        *varsum = VarSum;
-      } else {
-        log(logWarning, "Failed to get vars after restart.");
+    if (getVars(vars, &changed)) {
+      if (changed) {
+        log(logDebug, "Persistent vars changed after restart.");
+        writeVars(vars);
       }
+      *varsum = VarSum;
     } else {
-      log(logWarning, "Failed to connect to Wi-Fi after restart.");
+      log(logWarning, "Failed to get vars after restart.");
     }
 
     // Always turn off Wi-Fi afterward to ensure stable pin reads and save power.
-    wifiControl(false);
+    Handler->disconnect();
   }
 
   // Restart if the alarm has gone on for too long.
@@ -1390,7 +1407,7 @@ bool run(int* varsum) {
     log(logDebug, "Skipped voltage check");
   }
 
-  wifiControl(false); // Ensure WiFi is off before taking measurements.
+  Handler->disconnect(); // Disconnect WiFi before taking measurements.
 
   // Read inputs, if any.
   // NB: We do this before we are connected to the network.
@@ -1398,19 +1415,6 @@ bool run(int* varsum) {
     readPin(&inputs[ii]);
   }
 
-  // Turn on WiFi, connect, and then send input values and/or receive output values.
-  if (!wifiBegin()) {
-    NetworkFailures++;
-    if (Config.vars[pvAlarmNetwork] > 0 && NetworkFailures >= Config.vars[pvAlarmNetwork]) {
-      // too many network failures; raise the alarm!
-      writeAlarm(true, false);
-      NetworkFailures = 0;
-    } else {
-      cyclePin(STATUS_PIN, statusWiFiError);
-    }
-    return pause(false, pulsed, &lag);
-  }
-  
   // Attempt configuration whenever:
   //   (1) there are no inputs and no outputs, or 
   //   (2) we receive a update code
@@ -1423,7 +1427,7 @@ bool run(int* varsum) {
   // Since version 138 the poll method returns outputs as well as inputs,
   if (Config.inputs[0] != '\0') {
     setPins(Config.outputs, outputs);
-    if (!request(RequestPoll, inputs, outputs, &reconfig, reply)) {
+    if (!Handler->request(RequestPoll, inputs, outputs, &reconfig, reply)) {
       return pause(false, pulsed, &lag);
     }
   }
@@ -1431,7 +1435,7 @@ bool run(int* varsum) {
   // so we only need to call the act method in if there are no inputs.
   if (Config.inputs[0] == '\0' && Config.outputs[0] != '\0') {
     setPins(Config.outputs, outputs);
-    if (!request(RequestAct, NULL, outputs, &reconfig, reply)) {
+    if (!Handler->request(RequestAct, NULL, outputs, &reconfig, reply)) {
       return pause(false, pulsed, &lag);
     }
   }
