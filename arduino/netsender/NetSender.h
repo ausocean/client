@@ -113,6 +113,7 @@ typedef int (*ReaderFunc)(Pin *);
 class BaseHandler {
 public:
   virtual const char* name() = 0;
+  virtual bool init() = 0;
   virtual bool request(RequestType req, Pin* inputs, Pin* outputs, bool* reconfig, String& reply) = 0;
   virtual bool connect() = 0;
   virtual void disconnect() = 0;
@@ -122,6 +123,7 @@ public:
 class OnlineHandler : public BaseHandler {
 public:
   const char* name() { return mode::Online; }
+  bool init() override;
   bool request(RequestType req, Pin* inputs, Pin* outputs, bool* reconfig, String& reply) override;
   bool connect() override;
   void disconnect() override;
@@ -133,6 +135,7 @@ private:
 class OfflineHandler : public BaseHandler {
 public:
   const char* name() override { return mode::Offline; };
+  bool init() override;
   bool request(RequestType req, Pin* inputs, Pin* outputs, bool* reconfig, String& reply) override;
   bool connect() override { return false; };
   void disconnect() override {};

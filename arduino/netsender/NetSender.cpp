@@ -874,6 +874,11 @@ bool httpRequest(String url, String body, String& reply) {
 }
 
 // Online request handler, i.e., Normal mode.
+// One-time setup.
+bool OnlineHandler::init() {
+  return true;
+}
+
 // Issue a single request, writing polled values to 'inputs' and actuated values to 'outputs'.
 // Config requests (and only config requests) communicate the device mode and error,
 // where the mode corresponds to the active request handler.

@@ -22,11 +22,6 @@
 */
 
 #include <stdlib.h>
-#include <limits.h>
-#include <string.h>
-#include <ctype.h>
-#include <cstdarg>
-#include <cstdio>
 #include "Arduino.h"
 
 #include "NetSender.h"
@@ -34,6 +29,11 @@
 namespace NetSender {
 
 // Offline request handler.
+// One-time setup.
+bool OfflineHandler::init() {
+  return true;
+}
+
 // Requests are handled as follows:
 // - Config & Vars: delegated to the online handler, which will fail unless there is network connectivity.
 // - Poll: write data to local storage, which does not require network connectivity.
