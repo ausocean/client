@@ -1,6 +1,7 @@
 /*
   Description:
     NetSender offline request handler.
+    Data is written to an SD card.
 
   License:
     Copyright (C) 2025 The Australian Ocean Lab (AusOcean).
@@ -22,21 +23,80 @@
 */
 
 #include <stdlib.h>
-#include "Arduino.h"
+#include <SPI.h>
+#include <SD.h>
 
 #include "NetSender.h"
 
 namespace NetSender {
 
-// Offline request handler.
-// One-time setup.
+#ifdef ESP8266
+#define SD_CS_PIN     15 // SD Chip Select pin (but has boot restrictions)
+#define SPI_SCLK_PIN  14 // SPI Serial Clock pin
+#define SPI_MISO_PIN  12 // SPI Master In Slave Out pin
+#define SPI_MOSI_PIN  13 // SPI Master Out Slave In pin
+#endif
+#ifdef ESP32 || defined __linux__
+#define SD_CS_PIN      5 // SD Chip Select pin
+#define SPI_SCLK_PIN  18 // SPI Serial Clock pin
+#define SPI_MISO_PIN  19 // SPI Master In Slave Out pin
+#define SPI_MOSI_PIN  23 // SPI Master Out Slave In pin
+#endif
+
+// SD data file constants.
+namespace datafile {
+  const long version                = 1;
+  const unsigned long versionMarker = 0x7ffffffe;
+  const unsigned long timeMarker    = 0x7fffffff;
+}
+
+// Scalar type without ID.
+typedef struct {
+  unsigned long timestamp;
+  long value;
+} Scalar;
+
+// Offline mode initialization.
+// Initialize the SPI interface and the SD card.
 bool OfflineHandler::init() {
+  SPI.begin(SPI_SCLK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN);
+  if (!SD.begin(SD_CS_PIN)) {
+    log(logError, "Could not initialize SD card using CS pin", SD_CS_PIN);
+    return false;
+  }
   return true;
 }
 
+// writeHeader writes an SD card data file header comprising a version
+// record followed by the start time.
+bool writeHeader(const char* name, File file) {
+  Scalar datum;
+  datum.value = datafile::versionMarker;
+  datum.timestamp = datafile::version;
+  auto n = file.write((byte*)&datum, sizeof(Scalar));
+  if (n != sizeof(Scalar)) {
+    log(logError, "Could not write version to SD card file %s", name);
+    return false;
+  }
+
+  datum.value = datafile::timeMarker;
+  datum.timestamp = StartTime;
+  if (StartTime == 0) {
+    log(logWarning, "StartTime not set");
+  }
+  n = file.write((byte*)&datum, sizeof(Scalar));
+  if (n != sizeof(Scalar)) {
+    log(logError, "Could not write start time to SD card file %s", name);
+    return false;
+  }
+
+  return true;
+}
+
+// Offline request handler.
 // Requests are handled as follows:
 // - Config & Vars: delegated to the online handler, which will fail unless there is network connectivity.
-// - Poll: write data to local storage, which does not require network connectivity.
+// - Poll: write input data to SD card.
 // - Act: does nothing.
 bool OfflineHandler::request(RequestType req, Pin * inputs, Pin * outputs, bool * reconfig, String& reply) {
   switch (req) {
@@ -63,17 +123,44 @@ bool OfflineHandler::request(RequestType req, Pin * inputs, Pin * outputs, bool 
     return true; // Nothing to do.
   }
 
+  auto ok = true;
   for (int ii = 0; ii < MAX_PINS && inputs[ii].name[0] != '\0'; ii++) {
     if (inputs[ii].value < 0) {
-      // Omit negative scalars.
       log(logDebug, "Not saving negative value for %s", inputs[ii].name);
       continue;
     }
-    // ToDo: Save value to local storage.
-    log(logDebug, "Saving %s=%s", inputs[ii].name, inputs[ii].value);
+
+    log(logDebug, "Saving %s=%d", inputs[ii].name, inputs[ii].value);
+
+    // Append data to a binary file with the name of the pin.
+    auto file = SD.open(inputs[ii].name, FILE_WRITE);
+    if (file == NULL) {
+      log(logError, "Could not open %s on SD card", inputs[ii].name);
+      ok = false;
+      continue;
+    }
+
+    if (file.size() == 0) {
+      ok = writeHeader(inputs[ii].name, file);
+      if (!ok) {
+        file.close();
+	continue;
+      }
+    }
+
+    Scalar datum;
+    datum.value = inputs[ii].value;
+    datum.timestamp = millis()/1000;
+    auto n = file.write((byte*)&datum, sizeof(Scalar));
+    if (n != sizeof(Scalar)) {
+      log(logError, "Could not write data to SD card file %s", inputs[ii].name);
+      ok = false;
+    }
+
+    file.close();
   }
 
-  return true;
+  return ok;
 }
 
 } // end namespace

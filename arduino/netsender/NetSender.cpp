@@ -213,6 +213,7 @@ ReaderFunc ExternalReader = NULL;
 ReaderFunc BinaryReader = NULL;
 int VarSum = 0;
 HandlerManager Handlers;
+unsigned long StartTime = 0;
 
 // Other globals.
 static int XPin[xMax] = {100000, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0, 0, 0};
@@ -1103,6 +1104,8 @@ bool config() {
 // set changed to true if a persistent var has changed.
 // Transient vars, such as "id" or "error" are not saved.
 // Missing persistent vars default to 0, except for peak voltage and auto restart.
+// Side effects:
+//   - StartTime is set to supplied timestamp (ts), unless already set.
 bool getVars(int vars[MAX_VARS], bool* changed) {
   String reply, error, id, mode, param, var;
   bool reconfig;
@@ -1120,7 +1123,7 @@ bool getVars(int vars[MAX_VARS], bool* changed) {
     auto h = Handlers.set(mode.c_str());
     if (h == NULL) {
       log(logWarning, "Invalid mode %s", mode.c_str());
-    } else if (mode != h->name()) {
+    } else if (mode != Handler->name()) {
       log(logDebug, "updated mode=%s", mode.c_str());
       Handler = h;
     } // else mode unchanged
@@ -1132,6 +1135,15 @@ bool getVars(int vars[MAX_VARS], bool* changed) {
     // Server-initiated error change, useful for testing.
     log(logDebug, "error=%s", error.c_str());
     error = Error;
+  }
+
+  auto hasTs = extractJson(reply, "ts", param);
+  if (hasTs) {
+    log(logDebug, "ts=%s", param.c_str());
+    if (StartTime != 0) {
+      StartTime = strtoul(param.c_str(), NULL, 10);
+      log(logInfo, "updated StartTime=%lu", StartTime);
+    }
   }
 
   for  (int ii = 0; ii < MAX_VARS; ii++) {

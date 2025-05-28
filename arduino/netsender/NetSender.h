@@ -164,6 +164,7 @@ extern ReaderFunc ExternalReader;
 extern ReaderFunc BinaryReader;
 extern int VarSum;
 extern HandlerManager Handlers;
+extern unsigned long StartTime;
 
 // init should be called from setup once.
 // run should be called from loop until it returns true, e.g., 
@@ -173,6 +174,7 @@ extern HandlerManager Handlers;
 extern void init();
 extern bool run(int*);
 extern void log(LogLevel, const char*, ...);
+extern int setPins(const char*, Pin*);
 
 } // end namespace
 #endif
