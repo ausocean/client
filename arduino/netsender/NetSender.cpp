@@ -204,7 +204,7 @@ const char* logLevels[] = {"", "Error", "Warning", "Info", "Debug"};
 // Device errors, used to convey abnormal states.
 namespace error {
   constexpr const char* None = "";
-  constexpr const char* LowVoltageAlarm = "LowVoltageAlarm";
+  constexpr const char* LowVoltage = "LowVoltage";
 }
 
 // Exported globals.
@@ -1378,8 +1378,8 @@ bool run(int* varsum) {
     XPin[xBat] = readPin(&pin);
     if (XPin[xBat] < Config.vars[pvAlarmVoltage]) {
       log(logWarning, "Battery is below alarm voltage!");
-      if (Error != error::LowVoltageAlarm) {
-        setError(error::LowVoltageAlarm);
+      if (Error != error::LowVoltage) {
+        setError(error::LowVoltage);
       }
       log(logDebug, "Checking Alarmed pin");
       if (!XPin[xAlarmed]) {
@@ -1403,8 +1403,8 @@ bool run(int* varsum) {
       writeAlarm(false, true);
     } else {
       log(logDebug, "Alarmed pin is not currently alarmed");
-      if (Error == error::LowVoltageAlarm) {
-        log(logDebug, "Error is currently LowVoltageAlarm but it shouldn't be; changing to None");
+      if (Error == error::LowVoltage) {
+        log(logDebug, "Error is currently LowVoltage but it shouldn't be; changing to None");
         setError(error::None);
       }
     }
