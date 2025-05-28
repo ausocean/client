@@ -1103,12 +1103,11 @@ bool config() {
 // set changed to true if a persistent var has changed.
 // Transient vars, such as "id" or "error" are not saved.
 // Missing persistent vars default to 0, except for peak voltage and auto restart.
-bool getVars(int vars[MAX_VARS], bool* changed) {
+bool getVars(int vars[MAX_VARS], bool* changed, bool* reconfig) {
   String reply, error, id, mode, param, var;
-  bool reconfig;
   *changed = false;
 
-  if (!Handler->request(RequestVars, NULL, NULL, &reconfig, reply) || extractJson(reply, "er", param)) {
+  if (!Handler->request(RequestVars, NULL, NULL, reconfig, reply) || extractJson(reply, "er", param)) {
     return false;
   }
   auto hasId = extractJson(reply, "id", id);
@@ -1314,12 +1313,17 @@ bool run(int* varsum) {
 
   if (restarted) {
     log(logInfo, "Checking for vars after restart.");
-    if (getVars(vars, &changed)) {
+    if (getVars(vars, &changed, &reconfig)) {
       if (changed) {
         log(logDebug, "Persistent vars changed after restart.");
         writeVars(vars);
       }
       *varsum = VarSum;
+      if (reconfig) {
+	if (config()) {
+	  reconfig = false;
+	} // Else try again.
+      }
     } else {
       log(logWarning, "Failed to get vars after restart.");
     }
@@ -1450,7 +1454,7 @@ bool run(int* varsum) {
   }
 
   if (*varsum != VarSum) {
-    if (!getVars(vars, &changed)) {
+    if (!getVars(vars, &changed, &reconfig)) {
       return pause(false, pulsed, &lag);
     }
     if (changed) {
