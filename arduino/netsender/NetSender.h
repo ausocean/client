@@ -27,16 +27,18 @@
 #ifndef NetSender_H
 #define NetSender_H
 
+#include "Arduino.h"
+
 namespace NetSender {
 
 #ifdef ESP8266
-#define VERSION                180
+#define VERSION                181
 #define MAX_PINS               10
 #define DKEY_SIZE              20
 #define RESERVED_SIZE          48
 #endif
 #if defined ESP32 || defined __linux__
-#define VERSION                10015
+#define VERSION                10016
 #define MAX_PINS               20
 #define DKEY_SIZE              32
 #define RESERVED_SIZE          64
@@ -46,13 +48,31 @@ namespace NetSender {
 #define PIN_SIZE               4
 #define IO_SIZE                (MAX_PINS * PIN_SIZE)
 #define MAX_VARS               11
+#define MAX_HANDLERS           2
 
+// Device modes.
+namespace mode {
+  constexpr const char* Online = "Normal";
+  constexpr const char* Offline = "Offline";
+}
+
+// Device requests.
 typedef enum {
   RequestConfig = 0,
   RequestPoll   = 1,
   RequestAct    = 2,
   RequestVars   = 3,
 } RequestType;
+
+// Log levels for use with log function.
+typedef enum logLevel {
+  logNone    = 0,
+  logError   = 1,
+  logWarning = 2,
+  logInfo    = 3,
+  logDebug   = 4,
+  logMax     = 5
+} LogLevel;
 
 // Configuration parameters are saved to the first 256 or 384 bytes of EEPROM
 // for the ESP8266 or ESP32 respectively as follows:
@@ -89,11 +109,61 @@ typedef struct {
 // ReaderFunc represents a pin reading function.
 typedef int (*ReaderFunc)(Pin *);
 
+// BaseHandler defines our abstract base handler class.
+class BaseHandler {
+public:
+  virtual const char* name() = 0;
+  virtual bool init() = 0;
+  virtual bool request(RequestType req, Pin* inputs, Pin* outputs, bool* reconfig, String& reply) = 0;
+  virtual bool connect() = 0;
+  virtual void disconnect() = 0;
+};
+
+// OnlineHandler defines our handler in normal (online) operating mode.
+class OnlineHandler : public BaseHandler {
+public:
+  const char* name() { return mode::Online; }
+  bool init() override;
+  bool request(RequestType req, Pin* inputs, Pin* outputs, bool* reconfig, String& reply) override;
+  bool connect() override;
+  void disconnect() override;
+private:
+  bool connected;
+};
+
+// OfflineHandler defines our handler in offline mode.
+class OfflineHandler : public BaseHandler {
+public:
+  const char* name() override { return mode::Offline; };
+  bool init() override;
+  bool request(RequestType req, Pin* inputs, Pin* outputs, bool* reconfig, String& reply) override;
+  bool connect() override { return false; };
+  void disconnect() override {};
+};
+
+// HandlerManager defines our handler manager.
+class HandlerManager {
+public:
+  HandlerManager();
+  ~HandlerManager();
+
+  bool add(BaseHandler* handler);     // Add a handler.
+  BaseHandler* set(const char* name); // Set the current/active handler and return it.
+  BaseHandler* get();                 // Get the current/active handler.
+  BaseHandler* get(const char* name); // Get a handler by name.
+
+private:
+  BaseHandler* handlers[MAX_HANDLERS];
+  size_t size;
+  size_t current;
+};
+
 // exported globals
 extern Configuration Config;
 extern ReaderFunc ExternalReader;
 extern ReaderFunc BinaryReader;
 extern int VarSum;
+extern HandlerManager Handlers;
 
 // init should be called from setup once.
 // run should be called from loop until it returns true, e.g., 
@@ -102,6 +172,7 @@ extern int VarSum;
 //  }
 extern void init();
 extern bool run(int*);
+extern void log(LogLevel, const char*, ...);
 
 } // end namespace
 #endif
