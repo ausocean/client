@@ -44,6 +44,7 @@ namespace NetSender {
 #define RESERVED_SIZE          64
 #endif
 
+#define MAC_SIZE               18
 #define WIFI_SIZE              80
 #define PIN_SIZE               4
 #define IO_SIZE                (MAX_PINS * PIN_SIZE)
@@ -64,6 +65,24 @@ typedef enum {
   RequestVars   = 3,
 } RequestType;
 
+// Service response codes.
+enum rcCode {
+  rcOK      = 0,
+  rcUpdate  = 1,
+  rcReboot  = 2,
+  rcDebug   = 3,
+  rcUpgrade = 4,
+  rcAlarm   = 5,
+  rcTest    = 6
+};
+
+// Boot codes.
+enum bootReason {
+  bootNormal = 0x00, // Normal reboot (operator requested).
+  bootWiFi   = 0x01, // Reboot due to error when trying to disconnect from Wifi.
+  bootAlarm  = 0x02, // Alarm auto-restart.
+};
+
 // Log levels for use with log function.
 typedef enum logLevel {
   logNone    = 0,
@@ -73,6 +92,22 @@ typedef enum logLevel {
   logDebug   = 4,
   logMax     = 5
 } LogLevel;
+
+// Persistent variables (stored in EEPROM as part of configuration).
+// NB: Keep indexes in sync with names, and update MAX_VARS if needed.
+enum pvIndex {
+  pvLogLevel,
+  pvPulses,
+  pvPulseWidth,
+  pvPulseDutyCycle,
+  pvPulseCycle,
+  pvAutoRestart,
+  pvAlarmPeriod,
+  pvAlarmNetwork,
+  pvAlarmVoltage,
+  pvAlarmRecoveryVoltage,
+  pvPeakVoltage,
+};
 
 // Configuration parameters are saved to the first 256 or 384 bytes of EEPROM
 // for the ESP8266 or ESP32 respectively as follows:
@@ -159,11 +194,15 @@ private:
 };
 
 // exported globals
+extern bool Configured;
+extern char MacAddress[MAC_SIZE];
 extern Configuration Config;
 extern ReaderFunc ExternalReader;
 extern ReaderFunc BinaryReader;
 extern int VarSum;
 extern HandlerManager Handlers;
+extern BaseHandler *Handler;
+extern String Error;
 
 // init should be called from setup once.
 // run should be called from loop until it returns true, e.g., 
@@ -173,6 +212,10 @@ extern HandlerManager Handlers;
 extern void init();
 extern bool run(int*);
 extern void log(LogLevel, const char*, ...);
+extern void writePin(Pin*);
+extern void writeAlarm(bool, bool);
+extern bool extractJson(String, const char*, String&);
+extern void restart(bootReason, bool);
 
 } // end namespace
 #endif
