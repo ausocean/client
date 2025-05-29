@@ -475,7 +475,7 @@ void pulsePin(int pin, int pulses, int width, int dutyCycle=50) {
   if (XPin[xPulseSuppress]) {
     log(logDebug, "Pulse suppressed: %ds", pulses * width);
   } else {
-    log(logDebug, "Pulsing %d,%d,%ds", pulses, width, dutyCycle);
+    log(logDebug, "Pulsing %d,%d,%d", pulses, width, dutyCycle);
   }
   if (dutyCycle == 0) {
     dutyCycle = 50;
@@ -495,12 +495,14 @@ void pulsePin(int pin, int pulses, int width, int dutyCycle=50) {
   }
 }
 
-//  cycles a digital pin on and off, unless ESP8266 is in pulse mode.
-void cyclePin(int pin, int cycles) {
+// cycles a digital pin on and off, unless ESP8266 is in pulse mode,
+// returning the number of milliseconds.
+int cyclePin(int pin, int cycles) {
 #ifdef ESP8266
-  if (Config.vars[pvPulses] != 0) return;
+  if (Config.vars[pvPulses] != 0) return 0;
 #endif
   pulsePin(pin, cycles, 1, DUTY_CYCLE);
+  return cycles*1000;
 }
 
 // EEPROM utilities:
@@ -1076,9 +1078,11 @@ bool run(int* varsum) {
     *varsum = VarSum;
   }
 
+  // Indicate completion of the cycle and adjust pulsed time.
+  // ToDo: This is a debug feature that could be removed.
+  pulsed += cyclePin(STATUS_PIN, statusOK);
   // Adjust for pulse timing inaccuracy and network time.
   pause(true, pulsed, &lag);
-  cyclePin(STATUS_PIN, statusOK);
   if (Config.monPeriod == Config.actPeriod) {
     log(logDebug, "Cycle complete");
     return true;
