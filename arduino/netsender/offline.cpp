@@ -127,7 +127,7 @@ bool OfflineHandler::request(RequestType req, Pin * inputs, Pin * outputs, bool 
   }
 
   auto ok = true;
-  auto t = millis()/1000;
+  auto t = (millis()+500)/1000; // Nearest second.
   Scalar datum;
   for (int ii = 0; ii < MAX_PINS && inputs[ii].name[0] != '\0'; ii++) {
     if (inputs[ii].value < 0) {
