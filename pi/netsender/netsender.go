@@ -198,7 +198,7 @@ type PinReadWrite func(pin *Pin) error
 // local consts
 const (
 	pkgName         = "netsender"
-	version         = 172
+	version         = 173
 	defaultService  = "data.cloudblue.org"
 	monPeriod       = 60
 	rebooter        = "syncreboot"
