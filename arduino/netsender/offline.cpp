@@ -68,6 +68,7 @@ bool OfflineHandler::init() {
   }
   time = 0;
   initialized = true;
+  log(logInfo, "Initialized SD card using CS pin %d", SD_CS_PIN);
   return true;
 }
 
