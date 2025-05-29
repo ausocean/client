@@ -154,7 +154,7 @@ ReaderFunc ExternalReader = NULL;
 ReaderFunc BinaryReader = NULL;
 int VarSum = 0;
 HandlerManager Handlers;
-unsigned long StartTime = 0;
+unsigned long RefTimestamp = 0;
 BaseHandler *Handler;
 String Error = error::None;
 
@@ -701,7 +701,7 @@ bool config() {
 // Transient vars, such as "id" or "error" are not saved.
 // Missing persistent vars default to 0, except for peak voltage and auto restart.
 // Side effects:
-//   - StartTime is set to supplied timestamp (ts), unless already set.
+//   - RefTimestamp is set to supplied timestamp (ts), unless already set.
 bool getVars(int vars[MAX_VARS], bool* changed, bool* reconfig) {
   String reply, error, id, mode, param, var;
   *changed = false;
@@ -735,9 +735,9 @@ bool getVars(int vars[MAX_VARS], bool* changed, bool* reconfig) {
   auto hasTs = extractJson(reply, "ts", param);
   if (hasTs) {
     log(logDebug, "ts=%s", param.c_str());
-    if (StartTime != 0) {
-      StartTime = strtoul(param.c_str(), NULL, 10);
-      log(logInfo, "updated StartTime=%lu", StartTime);
+    if (RefTimestamp != 0) {
+      RefTimestamp = strtoul(param.c_str(), NULL, 10);
+      log(logInfo, "updated RefTimestamp=%lu", RefTimestamp);
     }
   }
 

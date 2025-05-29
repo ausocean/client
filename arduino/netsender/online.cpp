@@ -243,6 +243,8 @@ bool httpRequest(String url, String body, String& reply) {
 // init intializes the online request handler by disabling WiFi
 // persistence and recording our MAC address.
 bool OnlineHandler::init() {
+  log(logDebug, "Initializing online handler");
+  
   // Disable WiFi persistence in flash memory.
   WiFi.persistent(false);
 

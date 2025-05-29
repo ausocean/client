@@ -201,7 +201,7 @@ extern ReaderFunc ExternalReader;
 extern ReaderFunc BinaryReader;
 extern int VarSum;
 extern HandlerManager Handlers;
-extern unsigned long StartTime;
+extern unsigned long RefTimestamp;
 extern BaseHandler *Handler;
 extern String Error;
 

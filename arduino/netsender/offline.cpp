@@ -52,13 +52,14 @@ namespace datafile {
 
 // Scalar type without ID.
 typedef struct {
-  unsigned long timestamp;
   long value;
+  unsigned long timestamp;
 } Scalar;
 
 // Offline mode initialization.
 // Initialize the SPI interface and the SD card.
 bool OfflineHandler::init() {
+  log(logDebug, "Initializing offline handler");
   SPI.begin(SPI_SCLK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN);
   if (!SD.begin(SD_CS_PIN)) {
     log(logError, "Could not initialize SD card using CS pin", SD_CS_PIN);
@@ -80,9 +81,9 @@ bool writeHeader(const char* name, File file) {
   }
 
   datum.value = datafile::timeMarker;
-  datum.timestamp = StartTime;
-  if (StartTime == 0) {
-    log(logWarning, "StartTime not set");
+  datum.timestamp = RefTimestamp;
+  if (RefTimestamp == 0) {
+    log(logWarning, "RefTimestamp not set");
   }
   n = file.write((byte*)&datum, sizeof(Scalar));
   if (n != sizeof(Scalar)) {

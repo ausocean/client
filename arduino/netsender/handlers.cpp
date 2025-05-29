@@ -39,10 +39,11 @@ HandlerManager::~HandlerManager() {
 
 // add adds a handler and initializes it.
 bool HandlerManager::add(BaseHandler* handler) {
+  log(logDebug, "Adding handler %s", handler->name());
   if (size == MAX_HANDLERS) {
     return false;
   }
-  handlers[++size] = handler;
+  handlers[size++] = handler;
   return handler->init();
 }
 
