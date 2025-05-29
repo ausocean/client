@@ -914,7 +914,7 @@ bool run(int* varsum) {
   bool changed;
   bool restarted = (Time == 0);
 
-  log(logDebug, "Configured=%d", Configured);
+  log(logDebug, "Configured: %s", Configured ? "true" : "false");
 
   // Measure lag to maintain accuracy between cycles.
   if (Time > 0) {
