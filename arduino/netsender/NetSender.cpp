@@ -167,6 +167,11 @@ static int SimulatedBat = 0;
 
 // Utilities:
 
+// isOffline returns true in offline mode
+bool isOffline() {
+  return (Handler != NULL && strcmp(Handler->name(), mode::Offline) == 0);
+}
+
 // log prints a message if the given level is less than or equal to the LogLevel var level,
 // or if the system is not yet configured.
 void log(LogLevel level, const char* format, ...) {
@@ -495,9 +500,12 @@ void pulsePin(int pin, int pulses, int width, int dutyCycle=50) {
   }
 }
 
-// cycles a digital pin on and off, unless ESP8266 is in pulse mode,
-// returning the number of milliseconds.
+// cycles a digital pin on and off, unless we're offline of we're an
+// ESP8266 is in pulse mode, returning the number of milliseconds.
 int cyclePin(int pin, int cycles) {
+  if (isOffline()) {
+    return 0;
+  }
 #ifdef ESP8266
   if (Config.vars[pvPulses] != 0) return 0;
 #endif
