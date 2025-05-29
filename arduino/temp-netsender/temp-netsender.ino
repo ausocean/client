@@ -49,8 +49,8 @@ LICENSE
 #define DHTPIN       12
 #define DTPIN        13
 #else
-#define DHTPIN       36
-#define DTPIN        39
+#define DHTPIN       14
+#define DTPIN        13
 #endif
 #define ZERO_CELSIUS 273.15 // In Kelvin.
 
