@@ -254,7 +254,7 @@ bool OnlineHandler::init() {
   byte mac[6];
   WiFi.macAddress(mac);
   fmtMacAddress(mac, MacAddress);
-  log(logDebug, "Got MAC address: %s", MacAddress);
+  log(logInfo, "Got MAC address: %s", MacAddress);
   wifiOff();
 
   connected = false;
