@@ -174,6 +174,9 @@ public:
   bool request(RequestType req, Pin* inputs, Pin* outputs, bool* reconfig, String& reply) override;
   bool connect() override { return false; };
   void disconnect() override {};
+private:
+  bool initialized;
+  unsigned long time;
 };
 
 // HandlerManager defines our handler manager.

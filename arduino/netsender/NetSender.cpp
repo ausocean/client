@@ -74,6 +74,7 @@ enum statusCode {
   statusRestart      = 6,
 };
 
+// Persistent var names. Keep in sync with pvIndex.
 const char* PvNames[] = {
   "LogLevel",
   "Pulses",
@@ -636,6 +637,7 @@ bool config() {
   bool changed = false;
   Pin pins[2];
 
+  log(logDebug, "Getting config");
   // As of v160, var types (vt) are sent with config requests.
   strcpy(pins[0].name, "vt");
   pins[0].value = strlen(VarTypes);
@@ -706,6 +708,7 @@ bool getVars(int vars[MAX_VARS], bool* changed, bool* reconfig) {
   String reply, error, id, mode, param, var;
   *changed = false;
 
+  log(logDebug, "Getting vars");
   if (!Handler->request(RequestVars, NULL, NULL, reconfig, reply) || extractJson(reply, "er", param)) {
     return false;
   }
@@ -732,12 +735,21 @@ bool getVars(int vars[MAX_VARS], bool* changed, bool* reconfig) {
     error = Error;
   }
 
+  auto hasRc = extractJson(reply, "rc", param);
+  if (hasRc) {
+    log(logDebug, "rc=%s", param.c_str());
+    auto rc = param.toInt();
+    if (rc == rcUpdate) {
+      *reconfig = true;
+    }
+  }
+
   auto hasTs = extractJson(reply, "ts", param);
   if (hasTs) {
     log(logDebug, "ts=%s", param.c_str());
-    if (RefTimestamp != 0) {
+    if (RefTimestamp == 0) {
       RefTimestamp = strtoul(param.c_str(), NULL, 10);
-      log(logInfo, "updated RefTimestamp=%lu", RefTimestamp);
+      log(logInfo, "RefTimestamp=%lu", RefTimestamp);
     }
   }
 
@@ -807,7 +819,6 @@ void init(void) {
 #ifdef ESP8266
   digitalWrite(STATUS_PIN, HIGH);
 #endif
-  delay(2000);
 
   // Get Config.
   readConfig(&Config);
@@ -822,7 +833,7 @@ void init(void) {
   // Add handlers and set active handler.
   Handlers.add(new OnlineHandler);
   Handlers.add(new OfflineHandler);
-  Handlers.set(mode::Online); // ToDo: Get mode from non-volatile memory.
+  Handler = Handlers.set(mode::Online); // ToDo: Get mode from non-volatile memory.
 }
 
 // Pause to maintain timing accuracy, adjusting the timing lag in the process.
@@ -859,6 +870,7 @@ bool pause(bool ok, unsigned long pulsed, long * lag) {
 }
 
 // setError notifies the service of an error and updates the Error global upon success.
+// ToDo: validate the error.
 bool setError(const char* error) {
   String reply;
   bool reconfig;
@@ -892,20 +904,23 @@ bool run(int* varsum) {
   bool changed;
   bool restarted = (Time == 0);
 
+  log(logDebug, "Configured=%d", Configured);
+
   // Measure lag to maintain accuracy between cycles.
-  if (Time > 0 && now > Time) {
-    lag = (long)(now - Time) - (Config.monPeriod * 1000L);
+  if (Time > 0) {
+    if (now < Time) {
+      log(logDebug, "Rolled over");
+      lag = (long)(UINT_MAX - Time + now) - (Config.monPeriod * 1000L);
+      RefTimestamp += (UINT_MAX/1000);
+    } else {
+      lag = (long)(now - Time) - (Config.monPeriod * 1000L);
+    }
     log(logDebug, "Initial lag: %ldms", lag);
     if (lag < 0) {
       lag = 0;
     }
   }
   Time = now; // record the start of each cycle
-
-  // Handle reboot due to alarm.
-  if (Config.boot == bootAlarm) {
-    log(logInfo, "Restarted due to alarm.");
-  }
 
   if (restarted) {
     log(logInfo, "Checking for vars after restart.");
@@ -914,12 +929,12 @@ bool run(int* varsum) {
         log(logDebug, "Persistent vars changed after restart.");
         writeVars(vars);
       }
-      *varsum = VarSum;
       if (reconfig) {
 	if (config()) {
 	  reconfig = false;
-	} // Else try again.
+	} // Else try later
       }
+      *varsum = VarSum;
     } else {
       log(logWarning, "Failed to get vars after restart.");
     }
@@ -935,7 +950,7 @@ bool run(int* varsum) {
     if (now >= AlarmedTime) {
       alarmed = (now - AlarmedTime)/1000;
     } else { // rolled over
-      alarmed = ((0xffffffff - AlarmedTime) + now)/1000;
+      alarmed = ((UINT_MAX - AlarmedTime) + now)/1000;
     }
     log(logDebug, "Alarm duration: %ds", alarmed);
     if (alarmed >= Config.vars[pvAutoRestart]) {
@@ -1016,6 +1031,7 @@ bool run(int* varsum) {
 
   // Read inputs, if any.
   // NB: We do this before we are connected to the network.
+  log(logDebug, "Reading pins");
   for (int ii = 0, sz = setPins(Config.inputs, inputs); ii < sz; ii++) {
     readPin(&inputs[ii]);
   }
@@ -1089,7 +1105,7 @@ unsigned long elapsedMillis(unsigned long from) {
   if (now >= from) {
     elapsed = now - from;
   } else {
-    elapsed = (0xffffffff - from) + now; // Rolled over.
+    elapsed = (UINT_MAX - from) + now; // Rolled over.
   }
   return elapsed;
 }
