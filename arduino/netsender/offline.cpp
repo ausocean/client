@@ -147,6 +147,7 @@ bool OfflineHandler::request(RequestType req, Pin * inputs, Pin * outputs, bool 
 
     log(logDebug, "Saving %s=%d @ %lu", inputs[ii].name, inputs[ii].value, t);
     if (!initialized) {
+      log(logWarning, "SD card not initialized");
       continue;
     }
 
@@ -159,7 +160,9 @@ bool OfflineHandler::request(RequestType req, Pin * inputs, Pin * outputs, bool 
       continue;
     }
 
-    if (file.size() == 0) {
+    auto sz = file.size();
+    log(logDebug, "SD card file %s size: %d bytes", filename, sz);
+    if (sz == 0) {
       ok = writeHeader(filename, file);
     } else if (t < time) {
       // We've rolled over; write new reference time.
