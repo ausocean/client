@@ -56,6 +56,13 @@ typedef struct {
   unsigned long timestamp;
 } Scalar;
 
+// prefixString returns the string s with the prefix.
+char* prefixString(char* ss, char prefix, const char* s) {
+  ss[0] = prefix;
+  strcpy(ss+1, s);
+  return ss;
+}
+
 // Offline mode initialization.
 // Initialize the SPI interface and the SD card.
 bool OfflineHandler::init() {
@@ -74,12 +81,12 @@ bool OfflineHandler::init() {
 
 // writeHeader writes an SD card data file header comprising a version
 // record followed by the start time.
-bool writeHeader(const char* name, File file) {
+bool writeHeader(const char* filename, File file) {
   Scalar datum;
   datum.value = datafile::versionMarker;
   datum.timestamp = datafile::version;
   if (file.write((byte*)&datum, sizeof(Scalar)) != sizeof(Scalar)) {
-    log(logError, "Could not write version to SD card file %s", name);
+    log(logError, "Could not write version to SD card file %s", filename);
     return false;
   }
 
@@ -89,7 +96,7 @@ bool writeHeader(const char* name, File file) {
     log(logWarning, "RefTimestamp not set");
   }
   if (file.write((byte*)&datum, sizeof(Scalar)) != sizeof(Scalar)) {
-    log(logError, "Could not write reference time to SD card file %s", name);
+    log(logError, "Could not write reference time to SD card file %s", filename);
     return false;
   }
 
@@ -130,6 +137,8 @@ bool OfflineHandler::request(RequestType req, Pin * inputs, Pin * outputs, bool 
   auto ok = true;
   auto t = (millis()+500)/1000; // Nearest second.
   Scalar datum;
+  char filename[PIN_SIZE+1];
+
   for (int ii = 0; ii < MAX_PINS && inputs[ii].name[0] != '\0'; ii++) {
     if (inputs[ii].value < 0) {
       log(logDebug, "Not saving negative value for %s", inputs[ii].name);
@@ -142,21 +151,22 @@ bool OfflineHandler::request(RequestType req, Pin * inputs, Pin * outputs, bool 
     }
 
     // Append data to a binary file with the name of the pin.
-    auto file = SD.open(inputs[ii].name, FILE_WRITE);
+    prefixString(filename, '/', inputs[ii].name);
+    auto file = SD.open(filename, FILE_WRITE);
     if (file == NULL) {
-      log(logError, "Could not open %s on SD card", inputs[ii].name);
+      log(logError, "Could not open %s on SD card", filename);
       ok = false;
       continue;
     }
 
     if (file.size() == 0) {
-      ok = writeHeader(inputs[ii].name, file);
+      ok = writeHeader(filename, file);
     } else if (t < time) {
       // We've rolled over; write new reference time.
       datum.value = datafile::timeMarker;
       datum.timestamp = RefTimestamp;
        if (file.write((byte*)&datum, sizeof(Scalar)) != sizeof(Scalar)) {
-        log(logError, "Could not write reference time to SD card file %s", inputs[ii].name);
+        log(logError, "Could not write reference time to SD card file %s", filename);
         ok = false;
       }
     }
@@ -165,7 +175,7 @@ bool OfflineHandler::request(RequestType req, Pin * inputs, Pin * outputs, bool 
       datum.value = inputs[ii].value;
       datum.timestamp = t;
        if (file.write((byte*)&datum, sizeof(Scalar)) != sizeof(Scalar)) {
-        log(logError, "Could not write data to SD card file %s", inputs[ii].name);
+        log(logError, "Could not write data to SD card file %s", filename);
         ok = false;
       }
     }
