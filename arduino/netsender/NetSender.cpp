@@ -63,6 +63,7 @@ namespace NetSender {
 #define AUTO_RESTART           600  // Elapsed seconds (10 mins) for automatic restart after an alarm.
 
 #define RETRY_PERIOD           5    // Seconds between retrying after a failure.
+#define HEARTBEAT_ATTEMPTS     5    // Number of times we'll attempt to send a heartbeat.
 
 // Status codes define how many times the status LED is flashed for the given condition.
 enum statusCode {
@@ -74,6 +75,7 @@ enum statusCode {
   statusRestart      = 6,
 };
 
+// Persistent var names. Keep in sync with pvIndex.
 const char* PvNames[] = {
   "LogLevel",
   "Pulses",
@@ -85,7 +87,8 @@ const char* PvNames[] = {
   "AlarmNetwork",
   "AlarmVoltage",
   "AlarmRecoveryVoltage",
-  "PeakVoltage"
+  "PeakVoltage",
+  "HeartbeatPeriod"
 };
 
 // X pins
@@ -136,15 +139,9 @@ PowerPin PowerPins[] = {
 #endif
 
 // Variable types, which include both persistent vars and vars associated with power pins. PulseSuppress is included for convenience.
-const char* VarTypes = "{\"LogLevel\":\"uint\", \"Pulses\":\"uint\", \"PulseWidth\":\"uint\", \"PulseDutyCycle\":\"uint\", \"PulseCycle\":\"uint\", \"AutoRestart\":\"uint\", \"AlarmPeriod\":\"uint\", \"AlarmNetwork\":\"uint\", \"AlarmVoltage\":\"uint\", \"AlarmRecoveryVoltage\":\"uint\", \"PeakVoltage\":\"uint\", \"Power0\":\"bool\", \"Power1\":\"bool\", \"Power2\":\"bool\", \"Power3\":\"bool\", \"PulseSuppress\":\"bool\"}";
+const char* VarTypes = "{\"LogLevel\":\"uint\", \"Pulses\":\"uint\", \"PulseWidth\":\"uint\", \"PulseDutyCycle\":\"uint\", \"PulseCycle\":\"uint\", \"AutoRestart\":\"uint\", \"AlarmPeriod\":\"uint\", \"AlarmNetwork\":\"uint\", \"AlarmVoltage\":\"uint\", \"AlarmRecoveryVoltage\":\"uint\", \"PeakVoltage\":\"uint\", \"HeartbeatPeriod\":\"uint\", \"Power0\":\"bool\", \"Power1\":\"bool\", \"Power2\":\"bool\", \"Power3\":\"bool\", \"PulseSuppress\":\"bool\"}";
 
 const char* logLevels[] = {"", "Error", "Warning", "Info", "Debug"};
-
-// Device errors, used to convey abnormal states.
-namespace error {
-  constexpr const char* None = "";
-  constexpr const char* LowVoltage = "LowVoltage";
-}
 
 // Exported globals.
 bool Configured = false;
@@ -154,6 +151,7 @@ ReaderFunc ExternalReader = NULL;
 ReaderFunc BinaryReader = NULL;
 int VarSum = 0;
 HandlerManager Handlers;
+unsigned long RefTimestamp = 0;
 BaseHandler *Handler;
 String Error = error::None;
 
@@ -161,9 +159,15 @@ String Error = error::None;
 static int XPin[xMax] = {100000, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0, 0, 0};
 static unsigned long Time = 0;
 static unsigned long AlarmedTime = 0;
+static unsigned long HeartbeatTime = 0;
 static int SimulatedBat = 0;
 
 // Utilities:
+
+// isOffline returns true in offline mode
+bool isOffline() {
+  return (Handler != NULL && strcmp(Handler->name(), mode::Offline) == 0);
+}
 
 // log prints a message if the given level is less than or equal to the LogLevel var level,
 // or if the system is not yet configured.
@@ -473,7 +477,7 @@ void pulsePin(int pin, int pulses, int width, int dutyCycle=50) {
   if (XPin[xPulseSuppress]) {
     log(logDebug, "Pulse suppressed: %ds", pulses * width);
   } else {
-    log(logDebug, "Pulsing %d,%d,%ds", pulses, width, dutyCycle);
+    log(logDebug, "Pulsing %d,%d,%d", pulses, width, dutyCycle);
   }
   if (dutyCycle == 0) {
     dutyCycle = 50;
@@ -493,12 +497,17 @@ void pulsePin(int pin, int pulses, int width, int dutyCycle=50) {
   }
 }
 
-//  cycles a digital pin on and off, unless ESP8266 is in pulse mode.
-void cyclePin(int pin, int cycles) {
+// cycles a digital pin on and off, unless we're offline of we're an
+// ESP8266 is in pulse mode, returning the number of milliseconds.
+int cyclePin(int pin, int cycles) {
+  if (isOffline()) {
+    return 0;
+  }
 #ifdef ESP8266
-  if (Config.vars[pvPulses] != 0) return;
+  if (Config.vars[pvPulses] != 0) return 0;
 #endif
   pulsePin(pin, cycles, 1, DUTY_CYCLE);
+  return cycles*1000;
 }
 
 // EEPROM utilities:
@@ -635,6 +644,7 @@ bool config() {
   bool changed = false;
   Pin pins[2];
 
+  log(logDebug, "Getting config");
   // As of v160, var types (vt) are sent with config requests.
   strcpy(pins[0].name, "vt");
   pins[0].value = strlen(VarTypes);
@@ -699,15 +709,25 @@ bool config() {
 // set changed to true if any persistent var has changed.
 // Transient vars, such as "id" or "error" are not saved.
 // Missing persistent vars default to 0, except for peak voltage and auto restart.
+// Side effects:
+//   - RefTimestamp is set to supplied timestamp (ts), unless already set.
 bool getVars(int vars[MAX_VARS], bool* changed, bool* reconfig) {
   String reply, error, id, mode, param, var;
   *changed = false;
 
+  log(logDebug, "Getting vars");
   if (!Handler->request(RequestVars, NULL, NULL, reconfig, reply) || extractJson(reply, "er", param)) {
     return false;
   }
   auto hasId = extractJson(reply, "id", id);
   if (hasId) log(logDebug, "id=%s", id.c_str());
+
+  var = hasId ? id + ".error" : "error";
+  auto hasError = extractJson(reply, var.c_str(), error);
+  if (hasError) {
+    log(logDebug, "error=%s", error.c_str());
+     Error = error; // NB: We allow the error to be overwritten for testing only.
+  }
 
   var = hasId ? id + ".mode" : "mode";
   auto hasMode = extractJson(reply, var.c_str(), mode);
@@ -715,18 +735,29 @@ bool getVars(int vars[MAX_VARS], bool* changed, bool* reconfig) {
     auto h = Handlers.set(mode.c_str());
     if (h == NULL) {
       log(logWarning, "Invalid mode %s", mode.c_str());
-    } else if (mode != h->name()) {
+    } else if (mode != Handler->name()) {
       log(logDebug, "updated mode=%s", mode.c_str());
       Handler = h;
+      Error = error::None; // Clear error, if any.
     } // else mode unchanged
   }
 
-  var = hasId ? id + ".error" : "error";
-  auto hasError = extractJson(reply, var.c_str(), error);
-  if (hasError) {
-    // Server-initiated error change, useful for testing.
-    log(logDebug, "error=%s", error.c_str());
-    error = Error;
+  auto hasRc = extractJson(reply, "rc", param);
+  if (hasRc) {
+    log(logDebug, "rc=%s", param.c_str());
+    auto rc = param.toInt();
+    if (rc == rcUpdate) {
+      *reconfig = true;
+    }
+  }
+
+  auto hasTs = extractJson(reply, "ts", param);
+  if (hasTs) {
+    log(logDebug, "ts=%s", param.c_str());
+    if (RefTimestamp == 0) {
+      RefTimestamp = strtoul(param.c_str(), NULL, 10);
+      log(logInfo, "RefTimestamp=%lu", RefTimestamp);
+    }
   }
 
   for  (int ii = 0; ii < MAX_VARS; ii++) {
@@ -795,7 +826,6 @@ void init(void) {
 #ifdef ESP8266
   digitalWrite(STATUS_PIN, HIGH);
 #endif
-  delay(2000);
 
   // Get Config.
   readConfig(&Config);
@@ -810,7 +840,7 @@ void init(void) {
   // Add handlers and set active handler.
   Handlers.add(new OnlineHandler);
   Handlers.add(new OfflineHandler);
-  Handlers.set(mode::Online); // ToDo: Get mode from non-volatile memory.
+  Handler = Handlers.set(mode::Online); // ToDo: Get mode from non-volatile memory.
 }
 
 // Pause to maintain timing accuracy, adjusting the timing lag in the process.
@@ -847,16 +877,30 @@ bool pause(bool ok, unsigned long pulsed, long * lag) {
 }
 
 // setError notifies the service of an error and updates the Error global upon success.
+// ToDo: validate the error.
 bool setError(const char* error) {
-  String reply;
-  bool reconfig;
-  auto prevError = Error;
+  if (Error == error) {
+    return true; // Nothing to do.
+  }
+
+  auto h = Handlers.get(mode::Online);
+  if (h == NULL) {
+    log(logError, "Could not get online handler to send error");
+    return false;
+  }
+
+  auto err = Error;
   Error = error;
-  if (Handler->request(RequestConfig, NULL, NULL, &reconfig, reply)) {
+  bool reconfig;
+  String reply;
+  auto ok = h->request(RequestConfig, NULL, NULL, &reconfig, reply);
+  h->disconnect();
+
+  if (ok) {
     log(logDebug, "error=%s", error);
     return true;
   }
-  Error = prevError;
+  Error = err;
   log(logWarning, "Failed to notify service of error, error unchanged");
   return false;
 }
@@ -867,6 +911,8 @@ bool setError(const char* error) {
 //  }
 // Connecting to WiFi is handled by the request handler (if required),
 // but we call disconnect here to ensure WiFi is not left on.
+// If a config request fails, we pause then re-try.
+// If other requests fails, we simply log and continue.
 // NB: pulse suppression must be re-enabled each cycle via the X14 pin.
 bool run(int* varsum) {
   log(logDebug, "---- starting run cycle ----");
@@ -878,11 +924,19 @@ bool run(int* varsum) {
   unsigned long now = millis();
   int vars[MAX_VARS];
   bool changed;
-  bool restarted = (Time == 0);
+  bool heartbeat = (Time == 0); // Always check in upon restart.
+
+  log(logDebug, "Configured: %s", Configured ? "true" : "false");
 
   // Measure lag to maintain accuracy between cycles.
-  if (Time > 0 && now > Time) {
-    lag = (long)(now - Time) - (Config.monPeriod * 1000L);
+  if (Time > 0) {
+    if (now < Time) {
+      log(logDebug, "Rolled over");
+      lag = (long)(UINT_MAX - Time + now) - (Config.monPeriod * 1000L);
+      RefTimestamp += (UINT_MAX/1000);
+    } else {
+      lag = (long)(now - Time) - (Config.monPeriod * 1000L);
+    }
     log(logDebug, "Initial lag: %ldms", lag);
     if (lag < 0) {
       lag = 0;
@@ -890,30 +944,41 @@ bool run(int* varsum) {
   }
   Time = now; // record the start of each cycle
 
-  // Handle reboot due to alarm.
-  if (Config.boot == bootAlarm) {
-    log(logInfo, "Restarted due to alarm.");
+  // Check if it's time to do a heartbeat.
+  if (isOffline() && Config.vars[pvHeartbeatPeriod] > 0 && (now-HeartbeatTime)/1000 >= Config.vars[pvHeartbeatPeriod]) {
+    log(logInfo, "Issuing heartbeat.");
+    heartbeat = true;
   }
 
-  if (restarted) {
-    log(logInfo, "Checking for vars after restart.");
-    if (getVars(vars, &changed, &reconfig)) {
+  if (heartbeat) {
+    auto ok = false;
+    for (int attempts = 0; attempts < HEARTBEAT_ATTEMPTS; attempts++) {
+      ok = getVars(vars, &changed, &reconfig);
+      if (ok) {
+	break;
+      }
+      pause(false, 0, &lag);
+    }
+
+    if (ok) {
       if (changed) {
-        log(logDebug, "Persistent vars changed after restart.");
+        log(logDebug, "Persistent vars changed after restart/heartbeat.");
         writeVars(vars);
       }
+
+      if (reconfig && config()) {
+        reconfig = false;
+      } // Else try later.
+
       *varsum = VarSum;
-      if (reconfig) {
-	if (config()) {
-	  reconfig = false;
-	} // Else try again.
-      }
+
     } else {
-      log(logWarning, "Failed to get vars after restart.");
+      log(logWarning, "Failed to get vars after restart/heartbeat.");
     }
 
     // Always turn off Wi-Fi afterward to ensure stable pin reads and save power.
     Handler->disconnect();
+    HeartbeatTime = now;
   }
 
   // Restart if the alarm has gone on for too long.
@@ -923,7 +988,7 @@ bool run(int* varsum) {
     if (now >= AlarmedTime) {
       alarmed = (now - AlarmedTime)/1000;
     } else { // rolled over
-      alarmed = ((0xffffffff - AlarmedTime) + now)/1000;
+      alarmed = ((UINT_MAX - AlarmedTime) + now)/1000;
     }
     log(logDebug, "Alarm duration: %ds", alarmed);
     if (alarmed >= Config.vars[pvAutoRestart]) {
@@ -954,17 +1019,12 @@ bool run(int* varsum) {
 
   // Check battery voltage if we have an alarm voltage.
   if (Config.vars[pvAlarmVoltage] > 0) {
-    Pin pin;
-    pin.name[0] = 'A';
-    pin.name[1] = '0'+BAT_PIN;
-    pin.name[2] = '\0';
+    Pin pin = { .name = {'A', (char)('0'+BAT_PIN), '\0'} };
     log(logDebug, "Checking battery voltage");
     XPin[xBat] = readPin(&pin);
     if (XPin[xBat] < Config.vars[pvAlarmVoltage]) {
       log(logWarning, "Battery is below alarm voltage!");
-      if (Error != error::LowVoltage) {
-        setError(error::LowVoltage);
-      }
+      setError(error::LowVoltage);
       log(logDebug, "Checking Alarmed pin");
       if (!XPin[xAlarmed]) {
         log(logWarning, "Alarmed pin is not currently alarmed, writing alarm pin");
@@ -1004,24 +1064,27 @@ bool run(int* varsum) {
 
   // Read inputs, if any.
   // NB: We do this before we are connected to the network.
+  log(logDebug, "Reading pins");
   for (int ii = 0, sz = setPins(Config.inputs, inputs); ii < sz; ii++) {
     readPin(&inputs[ii]);
   }
 
   // Attempt configuration whenever:
-  //   (1) there are no inputs and no outputs, or 
-  //   (2) we receive a update code
-  if (Config.inputs[0] == '\0' && Config.outputs[0] == '\0') {
+  //   (1) there are no inputs and no outputs, or
+  //   (2) we received a reconfig request earlier
+  if (reconfig || (Config.inputs[0] == '\0' && Config.outputs[0] == '\0')) {
     if (!config()) {
+      log(logDebug, "Config request failed (%s)", Error);
       return pause(false, pulsed, &lag);
     }
+    reconfig = false;
   }
 
-  // Since version 138 the poll method returns outputs as well as inputs,
+  // Since version 138 the poll method returns outputs as well as inputs.
   if (Config.inputs[0] != '\0') {
     setPins(Config.outputs, outputs);
     if (!Handler->request(RequestPoll, inputs, outputs, &reconfig, reply)) {
-      return pause(false, pulsed, &lag);
+      log(logDebug, "Poll request failed (%s)", Error);
     }
   }
 
@@ -1029,16 +1092,18 @@ bool run(int* varsum) {
   if (Config.inputs[0] == '\0' && Config.outputs[0] != '\0') {
     setPins(Config.outputs, outputs);
     if (!Handler->request(RequestAct, NULL, outputs, &reconfig, reply)) {
-      return pause(false, pulsed, &lag);
+      log(logDebug, "Act request failed (%s)", Error);
     }
   }
 
   if (reconfig && !config()) {
+    log(logDebug, "Config request failed (%s)", Error);
     return pause(false, pulsed, &lag);
   }
 
   if (*varsum != VarSum) {
     if (!getVars(vars, &changed, &reconfig)) {
+      log(logDebug, "Vars request failed (%s)", Error);
       return pause(false, pulsed, &lag);
     }
     if (changed) {
@@ -1048,9 +1113,11 @@ bool run(int* varsum) {
     *varsum = VarSum;
   }
 
+  // Indicate completion of the cycle and adjust pulsed time.
+  // ToDo: This is a debug feature that could be removed.
+  pulsed += cyclePin(STATUS_PIN, statusOK);
   // Adjust for pulse timing inaccuracy and network time.
   pause(true, pulsed, &lag);
-  cyclePin(STATUS_PIN, statusOK);
   if (Config.monPeriod == Config.actPeriod) {
     log(logDebug, "Cycle complete");
     return true;
@@ -1077,7 +1144,7 @@ unsigned long elapsedMillis(unsigned long from) {
   if (now >= from) {
     elapsed = now - from;
   } else {
-    elapsed = (0xffffffff - from) + now; // Rolled over.
+    elapsed = (UINT_MAX - from) + now; // Rolled over.
   }
   return elapsed;
 }

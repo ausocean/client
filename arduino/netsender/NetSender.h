@@ -48,13 +48,20 @@ namespace NetSender {
 #define WIFI_SIZE              80
 #define PIN_SIZE               4
 #define IO_SIZE                (MAX_PINS * PIN_SIZE)
-#define MAX_VARS               11
+#define MAX_VARS               12
 #define MAX_HANDLERS           2
 
 // Device modes.
 namespace mode {
   constexpr const char* Online = "Normal";
   constexpr const char* Offline = "Offline";
+}
+
+// Device errors.
+namespace error {
+  constexpr const char* None = "";
+  constexpr const char* LowVoltage = "LowVoltage";
+  constexpr const char* SDCardFailure = "SDCardFailure";
 }
 
 // Device requests.
@@ -107,6 +114,7 @@ enum pvIndex {
   pvAlarmVoltage,
   pvAlarmRecoveryVoltage,
   pvPeakVoltage,
+  pvHeartbeatPeriod,
 };
 
 // Configuration parameters are saved to the first 256 or 384 bytes of EEPROM
@@ -174,6 +182,9 @@ public:
   bool request(RequestType req, Pin* inputs, Pin* outputs, bool* reconfig, String& reply) override;
   bool connect() override { return false; };
   void disconnect() override {};
+private:
+  bool initialized;
+  unsigned long time;
 };
 
 // HandlerManager defines our handler manager.
@@ -201,6 +212,7 @@ extern ReaderFunc ExternalReader;
 extern ReaderFunc BinaryReader;
 extern int VarSum;
 extern HandlerManager Handlers;
+extern unsigned long RefTimestamp;
 extern BaseHandler *Handler;
 extern String Error;
 
@@ -212,6 +224,8 @@ extern String Error;
 extern void init();
 extern bool run(int*);
 extern void log(LogLevel, const char*, ...);
+extern int setPins(const char*, Pin*);
+extern bool setError(const char* error);
 extern void writePin(Pin*);
 extern void writeAlarm(bool, bool);
 extern bool extractJson(String, const char*, String&);

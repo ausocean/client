@@ -39,17 +39,19 @@ HandlerManager::~HandlerManager() {
 
 // add adds a handler and initializes it.
 bool HandlerManager::add(BaseHandler* handler) {
+  log(logDebug, "Adding handler %s", handler->name());
   if (size == MAX_HANDLERS) {
     return false;
   }
-  handlers[++size] = handler;
+  handlers[size++] = handler;
   return handler->init();
 }
 
 // set sets the current/active handler.
 BaseHandler* HandlerManager::set(const char* name) {
-  for (size_t ii; ii < size; ii++) {
+  for (size_t ii = 0; ii < size; ii++) {
     if (strcmp(handlers[ii]->name(), name) == 0) {
+      log(logDebug, "Set %s handler", name);
       current = ii;
       return handlers[current];
     }
@@ -67,7 +69,7 @@ BaseHandler* HandlerManager::get() {
 
 // get(name) gets the handler with the given name.
 BaseHandler* HandlerManager::get(const char* name) {
-  for (size_t ii; ii < size; ii++) {
+  for (size_t ii = 0; ii < size; ii++) {
     if (strcmp(handlers[ii]->name(), name) == 0) {
       return handlers[ii];
     }

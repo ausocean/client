@@ -205,7 +205,7 @@ bool httpRequest(String url, String body, String& reply) {
   WiFiClient client;
 
   auto get = (body.length() == 0);
-  log(logDebug, "%s %s", get ? "GET " : "POST ", url.c_str());
+  log(logDebug, "%s %s", get ? "GET" : "POST", url.c_str());
   http.setTimeout(HTTP_TIMEOUT);
   http.begin(client, url);
   const char* locationHeader[] = {"Location"};
@@ -243,23 +243,28 @@ bool httpRequest(String url, String body, String& reply) {
 // init intializes the online request handler by disabling WiFi
 // persistence and recording our MAC address.
 bool OnlineHandler::init() {
+  log(logDebug, "Initializing online handler");
+  
   // Disable WiFi persistence in flash memory.
   WiFi.persistent(false);
 
-  // Start WiFi in station mode just until we can get the MAC address.
-  WiFi.mode(WIFI_STA);
+  // Connect to WiFi to obtain the MAC address, then disconnect.
+  wifiOn();
+  delay(2000);
   byte mac[6];
   WiFi.macAddress(mac);
   fmtMacAddress(mac, MacAddress);
-  WiFi.mode(WIFI_MODE_NULL);
+  log(logInfo, "Got MAC address: %s", MacAddress);
+  wifiOff();
 
+  connected = false;
   return true;
 }
 
 // request issue a single request, writing polled values to 'inputs' and actuated values to 'outputs'.
 // Config requests (and only config requests) communicate the device mode and error,
 // where the mode corresponds to the name of the _active_ request handler.  
-// Sets 'reconfig' true if reconfiguration is required, false otherwise.
+// Sets 'reconfig' true if reconfiguration is required, otherwise leaves the value as is.
 // Side effects: 
 //   Updates VarSum global when differs from the varsum ("vs") parameter.
 //   Sets Configured global to false for update and alarm requests.
@@ -268,7 +273,6 @@ bool OnlineHandler::request(RequestType req, Pin * inputs, Pin * outputs, bool *
   char path[MAX_PATH];
   String param, body;
   unsigned long ut = millis()/1000;
-  *reconfig = false;
 
   switch (req) {
   case RequestConfig:
