@@ -100,6 +100,7 @@ bool writeHeader(const char* filename, File file) {
     return false;
   }
 
+  log(logDebug, "Wrote header to SD card file %s", filename);
   return true;
 }
 
@@ -134,6 +135,14 @@ bool OfflineHandler::request(RequestType req, Pin * inputs, Pin * outputs, bool 
     return true; // Nothing to do.
   }
 
+  if (!initialized) {
+    if (Error != error::SDCardFailure) {
+      log(logWarning, "SD card not initialized");
+      setError(error::SDCardFailure);
+    }
+    return false;
+  }
+
   auto ok = true;
   auto t = (millis()+500)/1000; // Nearest second.
   Scalar datum;
@@ -146,10 +155,6 @@ bool OfflineHandler::request(RequestType req, Pin * inputs, Pin * outputs, bool 
     }
 
     log(logDebug, "Saving %s=%d @ %lu", inputs[ii].name, inputs[ii].value, t);
-    if (!initialized) {
-      log(logWarning, "SD card not initialized");
-      continue;
-    }
 
     // Append data to a binary file with the name of the pin.
     prefixString(filename, '/', inputs[ii].name);
@@ -168,10 +173,11 @@ bool OfflineHandler::request(RequestType req, Pin * inputs, Pin * outputs, bool 
       // We've rolled over; write new reference time.
       datum.value = datafile::timeMarker;
       datum.timestamp = RefTimestamp;
-       if (file.write((byte*)&datum, sizeof(Scalar)) != sizeof(Scalar)) {
+      if (file.write((byte*)&datum, sizeof(Scalar)) != sizeof(Scalar)) {
         log(logError, "Could not write reference time to SD card file %s", filename);
         ok = false;
       }
+      log(logDebug, "Wrote reference time %d to SD card file %s", RefTimestamp, filename);
     }
 
     if (ok) {
