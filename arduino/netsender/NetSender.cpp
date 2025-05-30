@@ -86,7 +86,8 @@ const char* PvNames[] = {
   "AlarmNetwork",
   "AlarmVoltage",
   "AlarmRecoveryVoltage",
-  "PeakVoltage"
+  "PeakVoltage",
+  "HeartbeatPeriod"
 };
 
 // X pins
@@ -137,7 +138,7 @@ PowerPin PowerPins[] = {
 #endif
 
 // Variable types, which include both persistent vars and vars associated with power pins. PulseSuppress is included for convenience.
-const char* VarTypes = "{\"LogLevel\":\"uint\", \"Pulses\":\"uint\", \"PulseWidth\":\"uint\", \"PulseDutyCycle\":\"uint\", \"PulseCycle\":\"uint\", \"AutoRestart\":\"uint\", \"AlarmPeriod\":\"uint\", \"AlarmNetwork\":\"uint\", \"AlarmVoltage\":\"uint\", \"AlarmRecoveryVoltage\":\"uint\", \"PeakVoltage\":\"uint\", \"Power0\":\"bool\", \"Power1\":\"bool\", \"Power2\":\"bool\", \"Power3\":\"bool\", \"PulseSuppress\":\"bool\"}";
+const char* VarTypes = "{\"LogLevel\":\"uint\", \"Pulses\":\"uint\", \"PulseWidth\":\"uint\", \"PulseDutyCycle\":\"uint\", \"PulseCycle\":\"uint\", \"AutoRestart\":\"uint\", \"AlarmPeriod\":\"uint\", \"AlarmNetwork\":\"uint\", \"AlarmVoltage\":\"uint\", \"AlarmRecoveryVoltage\":\"uint\", \"PeakVoltage\":\"uint\", \"HeartbeatPeriod\":\"uint\", \"Power0\":\"bool\", \"Power1\":\"bool\", \"Power2\":\"bool\", \"Power3\":\"bool\", \"PulseSuppress\":\"bool\"}";
 
 const char* logLevels[] = {"", "Error", "Warning", "Info", "Debug"};
 
@@ -163,6 +164,7 @@ String Error = error::None;
 static int XPin[xMax] = {100000, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0, 0, 0};
 static unsigned long Time = 0;
 static unsigned long AlarmedTime = 0;
+static unsigned long HeartbeatTime = 0;
 static int SimulatedBat = 0;
 
 // Utilities:
@@ -912,7 +914,7 @@ bool run(int* varsum) {
   unsigned long now = millis();
   int vars[MAX_VARS];
   bool changed;
-  bool restarted = (Time == 0);
+  bool heartbeat = (Time == 0); // Always check in upon restart.
 
   log(logDebug, "Configured: %s", Configured ? "true" : "false");
 
@@ -932,11 +934,17 @@ bool run(int* varsum) {
   }
   Time = now; // record the start of each cycle
 
-  if (restarted) {
-    log(logInfo, "Checking for vars after restart.");
+  // Check if it's time to do a heartbeat.
+  if (Config.vars[pvHeartbeatPeriod] > 0 && (now-HeartbeatTime)/1000 >= Config.vars[pvHeartbeatPeriod]) {
+    log(logInfo, "Issuing heartbeat.");
+    HeartbeatTime = now;
+    heartbeat = true;
+  }
+
+  if (heartbeat) {
     if (getVars(vars, &changed, &reconfig)) {
       if (changed) {
-        log(logDebug, "Persistent vars changed after restart.");
+        log(logDebug, "Persistent vars changed after restart/heartbeat.");
         writeVars(vars);
       }
       if (reconfig) {
@@ -946,7 +954,7 @@ bool run(int* varsum) {
       }
       *varsum = VarSum;
     } else {
-      log(logWarning, "Failed to get vars after restart.");
+      log(logWarning, "Failed to get vars after restart/heartbeat.");
     }
 
     // Always turn off Wi-Fi afterward to ensure stable pin reads and save power.
