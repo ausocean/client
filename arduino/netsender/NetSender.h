@@ -184,7 +184,6 @@ public:
   void disconnect() override {};
 private:
   bool initialized;
-  unsigned long time;
 };
 
 // HandlerManager defines our handler manager.
