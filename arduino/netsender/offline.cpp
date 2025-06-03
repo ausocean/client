@@ -45,6 +45,7 @@ namespace NetSender {
 
 // SD data file constants.
 namespace datafile {
+  constexpr char dirNSD[]          = "/NSD";     // NetSender Data.
   const long version                = 1;
   const unsigned long versionMarker = 0x7ffffffe;
   const unsigned long timeMarker    = 0x7fffffff;
@@ -56,51 +57,59 @@ typedef struct {
   unsigned long timestamp;
 } Scalar;
 
-// prefixString returns the string s with the prefix.
-char* prefixString(char* ss, char prefix, const char* s) {
-  ss[0] = prefix;
-  strcpy(ss+1, s);
-  return ss;
-}
-
 // Offline mode initialization.
 // Initialize the SPI interface and the SD card.
 bool OfflineHandler::init() {
   log(logDebug, "Initializing offline handler");
   initialized = false;
+
   SPI.begin(SPI_SCLK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN);
   if (!SD.begin(SD_CS_PIN)) {
     log(logError, "Could not initialize SD card using CS pin %d", SD_CS_PIN);
     return false;
   }
-  time = 0;
+
+  // Check NSD directory exists, or create it.
+  File dir = SD.open(datafile::dirNSD);
+  if (!dir) {
+    log(logDebug, "Making SD card data directory %s", datafile::dirNSD);
+    if (!SD.mkdir(datafile::dirNSD)) {
+      log(logError, "Could not create data directory %s on SD card", datafile::dirNSD);
+      return false;
+    }
+  } else {
+    if (!dir.isDirectory()) {
+      log(logError, "SD card %s is not a directory", datafile::dirNSD);
+      dir.close();
+      return false;
+    }
+    dir.close();
+  }
+
   initialized = true;
   log(logInfo, "Initialized SD card using CS pin %d", SD_CS_PIN);
+  log(logInfo, "Writing NetSender data to SD card directory %s when offline", datafile::dirNSD);
   return true;
 }
 
+// writeRecord appends one record to a data file.
+bool writeRecord(File file, long value, unsigned long timestamp) {
+  Scalar record = { .value = value, .timestamp = timestamp };
+
+  return file.write((byte*)&record, sizeof(Scalar)) == sizeof(Scalar);
+}
+
 // writeHeader writes an SD card data file header comprising a version
-// record followed by the start time.
-bool writeHeader(const char* filename, File file) {
-  Scalar datum;
-  datum.value = datafile::versionMarker;
-  datum.timestamp = datafile::version;
-  if (file.write((byte*)&datum, sizeof(Scalar)) != sizeof(Scalar)) {
-    log(logError, "Could not write version to SD card file %s", filename);
+// record followed by the reference timestamp.
+bool writeHeader(File file) {
+  if (!(writeRecord(file, datafile::versionMarker, datafile::version) &&
+        writeRecord(file, datafile::timeMarker, RefTimestamp))) {
+    log(logError, "Could not write header to SD card file %s", file.name());
     return false;
   }
 
-  datum.value = datafile::timeMarker;
-  datum.timestamp = RefTimestamp;
-  if (RefTimestamp == 0) {
-    log(logWarning, "RefTimestamp not set");
-  }
-  if (file.write((byte*)&datum, sizeof(Scalar)) != sizeof(Scalar)) {
-    log(logError, "Could not write reference time to SD card file %s", filename);
-    return false;
-  }
-
-  log(logDebug, "Wrote header to SD card file %s", filename);
+  file.flush();
+  log(logDebug, "Wrote header to SD card file %s", file.name());
   return true;
 }
 
@@ -144,9 +153,8 @@ bool OfflineHandler::request(RequestType req, Pin * inputs, Pin * outputs, bool 
   }
 
   auto ok = true;
-  auto t = (millis()+500)/1000; // Nearest second.
-  Scalar datum;
-  char filename[PIN_SIZE+1];
+  unsigned long t = (millis()+500)/1000; // Nearest second.
+  char filename[sizeof(datafile::dirNSD)+PIN_SIZE+1];
 
   for (int ii = 0; ii < MAX_PINS && inputs[ii].name[0] != '\0'; ii++) {
     if (inputs[ii].value < 0) {
@@ -154,45 +162,37 @@ bool OfflineHandler::request(RequestType req, Pin * inputs, Pin * outputs, bool 
       continue;
     }
 
-    log(logDebug, "Saving %s=%d @ %lu", inputs[ii].name, inputs[ii].value, t);
+    log(logDebug, "Saving %s=%d @ %lu (%lu+%lu)", inputs[ii].name, inputs[ii].value, RefTimestamp+t, RefTimestamp, t);
 
     // Append data to a binary file with the name of the pin.
-    prefixString(filename, '/', inputs[ii].name);
-    auto file = SD.open(filename, FILE_WRITE);
-    if (file == NULL) {
+    strcpy(filename, datafile::dirNSD);
+    strcat(filename, "/");
+    strcat(filename, inputs[ii].name);
+    auto file = SD.open(filename, FILE_APPEND);
+    if (!file) {
       log(logError, "Could not open %s on SD card", filename);
       ok = false;
       continue;
     }
 
     auto sz = file.size();
-    log(logDebug, "SD card file %s size: %d bytes", filename, sz);
+    log(logDebug, "SD card file=%s, size=%lu, t=%lu", filename, sz, t);
     if (sz == 0) {
-      ok = writeHeader(filename, file);
-    } else if (t < time) {
-      // We've rolled over; write new reference time.
-      datum.value = datafile::timeMarker;
-      datum.timestamp = RefTimestamp;
-      if (file.write((byte*)&datum, sizeof(Scalar)) != sizeof(Scalar)) {
-        log(logError, "Could not write reference time to SD card file %s", filename);
+      if (!writeHeader(file)) {
+        file.close();
         ok = false;
+        continue;
       }
-      log(logDebug, "Wrote reference time %d to SD card file %s", RefTimestamp, filename);
     }
 
-    if (ok) {
-      datum.value = inputs[ii].value;
-      datum.timestamp = t;
-       if (file.write((byte*)&datum, sizeof(Scalar)) != sizeof(Scalar)) {
-        log(logError, "Could not write data to SD card file %s", filename);
-        ok = false;
-      }
+    if (!writeRecord(file, inputs[ii].value, RefTimestamp+t)) {
+      log(logError, "Could not write data to SD card file %s", filename);
+      ok = false;
     }
 
     file.close();
   }
 
-  time = t;
   return ok;
 }
 
