@@ -30,6 +30,7 @@
 
 #if defined ESP8266 || defined ESP32
 #include <EEPROM.h>
+#include <Preferences.h>
 #endif
 #ifdef __linux__
 #include "nonarduino.h"
@@ -64,6 +65,12 @@ namespace NetSender {
 
 #define RETRY_PERIOD           5    // Seconds between retrying after a failure.
 #define HEARTBEAT_ATTEMPTS     5    // Number of times we'll attempt to send a heartbeat.
+
+// Preferences.
+namespace pref {
+  constexpr const char* NameSpace = "NetSender";
+  constexpr const char* Mode      = "mode";
+}
 
 // Status codes define how many times the status LED is flashed for the given condition.
 enum statusCode {
@@ -154,6 +161,7 @@ HandlerManager Handlers;
 unsigned long RefTimestamp = 0;
 BaseHandler *Handler;
 String Error = error::None;
+Preferences Prefs;
 
 // Other globals.
 static int XPin[xMax] = {100000, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0, 0, 0};
@@ -736,6 +744,13 @@ bool getVars(int vars[MAX_VARS], bool* changed, bool* reconfig) {
     if (h == NULL) {
       log(logWarning, "Invalid mode %s", mode.c_str());
     } else if (mode != Handler->name()) {
+      // Save mode to ESP's non-volatile storage (read-write).
+      if (Prefs.begin(pref::NameSpace, false)) {
+        Prefs.putString(pref::Mode, mode);
+        Prefs.end();
+      } else {
+        log(logError, "Failed to open Preferences namespace %s", pref::NameSpace);
+      }
       log(logDebug, "updated mode=%s", mode.c_str());
       Handler = h;
       Error = error::None; // Clear error, if any.
@@ -840,7 +855,19 @@ void init(void) {
   // Add handlers and set active handler.
   Handlers.add(new OnlineHandler);
   Handlers.add(new OfflineHandler);
-  Handler = Handlers.set(mode::Online); // ToDo: Get mode from non-volatile memory.
+
+  // Get mode from ESP's non-volatile storage (read-only), or default to online mode.
+  if (Prefs.begin(pref::NameSpace, true)) {
+    Handler = Handlers.set(Prefs.getString(pref::Mode).c_str());
+    Prefs.end();
+  } else {
+    log(logWarning, "Failed to open Preferences namespace %s", pref::NameSpace);
+  }
+
+  if (Handler == NULL) {
+    log(logDebug, "Defaulting to online mode");
+    Handler = Handlers.set(mode::Online);
+  }
 }
 
 // Pause to maintain timing accuracy, adjusting the timing lag in the process.
