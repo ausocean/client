@@ -196,5 +196,4 @@ bool OfflineHandler::request(RequestType req, Pin * inputs, Pin * outputs, bool 
   return ok;
 }
 
-
 } // end namespace
