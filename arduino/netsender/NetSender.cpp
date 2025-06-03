@@ -740,7 +740,7 @@ bool getVars(int vars[MAX_VARS], bool* changed, bool* reconfig) {
   var = hasId ? id + ".mode" : "mode";
   auto hasMode = extractJson(reply, var.c_str(), mode);
   if (hasMode) {
-    auto h = Handlers.set(mode.c_str());
+    auto h = Handlers.get(mode.c_str());
     if (h == NULL) {
       log(logWarning, "Invalid mode %s", mode.c_str());
     } else if (mode != Handler->name()) {
