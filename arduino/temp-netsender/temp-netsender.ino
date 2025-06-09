@@ -39,6 +39,7 @@ LICENSE
 */
 
 #include "NetSender.h"
+#include "pin_safety.h"
 #include "DHT.h"
 #include <OneWire.h>
 #include <DallasTemperature.h>
@@ -46,12 +47,12 @@ LICENSE
 
 #define MAX_FAILURES 10
 #ifdef ESP8266
-#define DHTPIN       12
-#define DTPIN        13
+DEFINE_PIN(DHTPIN, 12, PinSpec::INPUT_MODE, PinSpec::INPUT_PULLUP_MODE, PinSpec::OUTPUT_MODE); // GPIO pin corresponding to the DHT22
+DEFINE_PIN(DTPIN,  13, PinSpec::INPUT_MODE, PinSpec::INPUT_PULLUP_MODE, PinSpec::OUTPUT_MODE); // GPIO pin corresponding to the DS18B20
 #else
-#define DHTPIN       14
-#define DTPIN        13
-#endif
+DEFINE_PIN(DHTPIN, 14, PinSpec::INPUT_MODE, PinSpec::INPUT_PULLUP_MODE, PinSpec::OUTPUT_MODE, PinSpec::OUTPUTS_PWM_AT_BOOT); // GPIO pin corresponding to the DHT22
+DEFINE_PIN(DTPIN,  13, PinSpec::INPUT_MODE, PinSpec::INPUT_PULLUP_MODE, PinSpec::OUTPUT_MODE); // GPIO pin corresponding to the DS18B20
+#endif 
 #define ZERO_CELSIUS 273.15 // In Kelvin.
 
 #define DHTTYPE DHT22 // external device #5 
