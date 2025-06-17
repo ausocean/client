@@ -92,6 +92,7 @@ void wifiOn() {
 #ifdef ESP32
   WiFi.mode(WIFI_STA);
 #endif
+  delay(WIFI_DELAY);
   log(logDebug, "WiFi on");
 }
 
@@ -396,6 +397,7 @@ bool OnlineHandler::connect() {
 // Disconnect from WiFi, unless already disconnected.
 void OnlineHandler::disconnect() {
   if (!connected) {
+    wifiOff(); // Just to be certain!
     return;
   }
   wifiControl(false);
