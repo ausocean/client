@@ -396,6 +396,15 @@ int readPin(Pin * pin) {
       pin->value = SimulatedBat;
       SimulatedBat = 0;
     } else {
+      if (Time < Config.monPeriod * 1000L) {
+        // Take a few dummy measurements when starting to allow ADC circuitry to settle.
+        analogRead(pn);
+	delay(20);
+        analogRead(pn);
+	delay(20);
+	analogRead(pn);
+	delay(20);
+      }
       pin->value = analogRead(pn);
     }
     break;
