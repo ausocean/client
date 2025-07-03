@@ -40,6 +40,7 @@ LICENSE
 */
 
 #include "NetSender.h"
+#include "pin_safety.h"
 #include "DHT.h"
 #include <OneWire.h>
 #include <DallasTemperature.h>
@@ -48,14 +49,14 @@ LICENSE
 
 #define MAX_FAILURES 10
 #ifdef ESP8266
-#define DHTPIN       12
-#define DTPIN        13
+DEFINE_PIN(DHTPIN, 12, PinSpec::INPUT_MODE, PinSpec::INPUT_PULLUP_MODE, PinSpec::OUTPUT_MODE); // GPIO pin corresponding to the DHT22
+DEFINE_PIN(DTPIN,  13, PinSpec::INPUT_MODE, PinSpec::INPUT_PULLUP_MODE, PinSpec::OUTPUT_MODE); // GPIO pin corresponding to the DS18B20
 #else
-#define DHTPIN       14
-#define DTPIN        13
-#define SDA          16
-#define SCL          17
-#endif
+DEFINE_PIN(DHTPIN, 14, PinSpec::INPUT_MODE, PinSpec::INPUT_PULLUP_MODE, PinSpec::OUTPUT_MODE, PinSpec::OUTPUTS_PWM_AT_BOOT); // GPIO pin corresponding to the DHT22
+DEFINE_PIN(DTPIN,  13, PinSpec::INPUT_MODE, PinSpec::INPUT_PULLUP_MODE, PinSpec::OUTPUT_MODE); // GPIO pin corresponding to the DS18B20
+DEFINE_PIN(SDA,    16, PinSpec::INPUT_MODE, PinSpec::INPUT_PULLUP_MODE, PinSpec::OUTPUT_MODE); // I2C SDA pin
+DEFINE_PIN(SCL,    17, PinSpec::INPUT_MODE, PinSpec::INPUT_PULLUP_MODE, PinSpec::OUTPUT_MODE); // I2C SCL pin
+#endif 
 #define ZERO_CELSIUS 273.15 // In Kelvin.
 static constexpr auto tslMax{4294966000.0}; // Saturated max value for TSL2951.
 

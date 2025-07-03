@@ -6,6 +6,8 @@ written by Adafruit Industries
 
 #include "DHT.h"
 
+#include "pin_safety.h"
+
 #define MIN_INTERVAL 2000
 
 DHT::DHT(uint8_t pin, uint8_t type, uint8_t count) {
@@ -23,7 +25,7 @@ DHT::DHT(uint8_t pin, uint8_t type, uint8_t count) {
 
 void DHT::begin(void) {
   // set up the pins!
-  pinMode(_pin, INPUT_PULLUP);
+  pinMode_runtime(_pin, INPUT_PULLUP);
   // Using this value makes sure that millis() - lastreadtime will be
   // >= MIN_INTERVAL right away. Note that this assignment wraps around,
   // but so will the subtraction.
@@ -141,7 +143,7 @@ boolean DHT::read(bool force) {
   delay(250);
 
   // First set data line low for 20 milliseconds.
-  pinMode(_pin, OUTPUT);
+  pinMode_runtime(_pin, OUTPUT);
   digitalWrite(_pin, LOW);
   delay(20);
 
@@ -156,7 +158,7 @@ boolean DHT::read(bool force) {
     delayMicroseconds(40);
 
     // Now start reading the data line to get the value from the DHT sensor.
-    pinMode(_pin, INPUT_PULLUP);
+    pinMode_runtime(_pin, INPUT_PULLUP);
     delayMicroseconds(10);  // Delay a bit to let sensor pull data line low.
 
     // First expect a low signal for ~80 microseconds followed by a high signal
