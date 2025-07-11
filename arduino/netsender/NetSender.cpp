@@ -27,6 +27,7 @@
 #include <ctype.h>
 #include <cstdarg>
 #include <cstdio>
+#include "config.h"
 
 #if defined ESP8266 || defined ESP32
 #include <EEPROM.h>
@@ -863,7 +864,9 @@ void init(void) {
 
   // Add handlers and set active handler.
   Handlers.add(new OnlineHandler);
+  #ifdef FEATURE_OFFLINE
   Handlers.add(new OfflineHandler);
+  #endif
 
   // Get mode from ESP's non-volatile storage (read-only), or default to online mode.
   if (Prefs.begin(pref::NameSpace, true)) {
