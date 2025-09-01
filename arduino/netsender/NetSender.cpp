@@ -993,7 +993,7 @@ bool run(int* varsum) {
     for (int attempts = 0; attempts < HEARTBEAT_ATTEMPTS; attempts++) {
       ok = getVars(vars, &changed, &reconfig);
       if (ok) {
-	break;
+        break;
       }
       pause(false, 0, &lag);
     }
