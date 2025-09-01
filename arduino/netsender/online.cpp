@@ -310,12 +310,15 @@ bool OnlineHandler::request(RequestType req, Pin * inputs, Pin * outputs, bool *
     writeAlarm(false, true);
     NetworkFailures = 0;
   } else {
-    NetworkFailures++;
-    log(logDebug, "Network failures: %d", NetworkFailures);
-    if (Config.vars[pvAlarmNetwork] > 0 && NetworkFailures >= Config.vars[pvAlarmNetwork]) {
-      // Too many network failures; raise the alarm!
-      writeAlarm(true, false);
-      NetworkFailures = 0;
+    log(logDebug, "Network request failed");
+    if (Config.vars[pvAlarmNetwork] > 0) {
+      NetworkFailures++;
+      log(logDebug, "Network failures: %d", NetworkFailures);
+      if (NetworkFailures >= Config.vars[pvAlarmNetwork]) {
+        // Too many network failures; raise the alarm!
+        writeAlarm(true, false);
+        NetworkFailures = 0;
+      }
     }
     return false;
   }

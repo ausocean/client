@@ -991,13 +991,16 @@ bool run(int* varsum) {
 
   if (heartbeat) {
     auto ok = false;
+    auto nw = Config.vars[pvAlarmNetwork];
+    Config.vars[pvAlarmNetwork] = 0; // Suppress network alarm.
     for (int attempts = 0; attempts < HEARTBEAT_ATTEMPTS; attempts++) {
       ok = getVars(vars, &changed, &reconfig);
       if (ok) {
-	break;
+        break;
       }
       pause(false, 0, &lag);
     }
+    Config.vars[pvAlarmNetwork] = nw; // Restore network alarm, if any.
 
     if (ok) {
       if (changed) {
