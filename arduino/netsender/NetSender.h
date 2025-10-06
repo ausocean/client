@@ -208,7 +208,7 @@ extern bool Configured;
 extern char MacAddress[MAC_SIZE];
 extern Configuration Config;
 extern ReaderFunc ExternalReader;
-extern ReaderFunc BinaryReader;
+extern ReaderFunc PostReader;
 extern int VarSum;
 extern HandlerManager Handlers;
 extern unsigned long RefTimestamp;
