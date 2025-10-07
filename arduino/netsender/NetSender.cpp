@@ -263,7 +263,9 @@ bool isValidPinName(const char *name, size_t len) {
   }
   switch(name[0]) {
   case 'A':
+  case 'B':
   case 'D':
+  case 'T':
   case 'X':
     if (!isdigit(name[1])) {
       return false;
