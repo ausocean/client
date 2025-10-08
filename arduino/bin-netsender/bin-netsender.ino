@@ -2,11 +2,8 @@
 NAME
   bin-netsender - Example NetSender client for sending binary data.
 
-SEE ALSO
-  NetReceiver help: http://netreceiver.appspot.com/help.
-
 LICENSE
-  Copyright (C) 2019 the Australian Ocean Lab (AusOcean).
+  Copyright (C) 2019-2025 the Australian Ocean Lab (AusOcean).
 
   This is free software: you can redistribute it and/or modify it
   under the terms of the GNU General Public License as published by
@@ -71,7 +68,7 @@ int slowReader(NetSender::Pin *pin) {
 // required Arduino routines
 // NB: setup runs everytime ESP8266 comes out of a deep sleep
 void setup(void) {
-  NetSender::BinaryReader = slowReader;
+  NetSender::PostReader = slowReader;
   NetSender::init();
   loop();
 }

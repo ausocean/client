@@ -32,13 +32,13 @@
 namespace NetSender {
 
 #ifdef ESP8266
-#define VERSION                182
+#define VERSION                190
 #define MAX_PINS               10
 #define DKEY_SIZE              20
 #define RESERVED_SIZE          48
 #endif
 #if defined ESP32 || defined __linux__
-#define VERSION                10019
+#define VERSION                10020
 #define MAX_PINS               20
 #define DKEY_SIZE              32
 #define RESERVED_SIZE          64
@@ -208,7 +208,7 @@ extern bool Configured;
 extern char MacAddress[MAC_SIZE];
 extern Configuration Config;
 extern ReaderFunc ExternalReader;
-extern ReaderFunc BinaryReader;
+extern ReaderFunc PostReader;
 extern int VarSum;
 extern HandlerManager Handlers;
 extern unsigned long RefTimestamp;

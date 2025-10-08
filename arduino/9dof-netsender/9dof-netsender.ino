@@ -3,7 +3,7 @@ NAME
   9DOF-netsender - Netsender client to send 9DOF sensor data to NetReciever.
 
 LICENSE
-  Copyright (C) 20219 the Australian Ocean Lab (AusOcean.
+  Copyright (C) 2019-2025 the Australian Ocean Lab (AusOcean.
 
   This file is part of NetSender. NetSender is free software: you can
   redistribute it and/or modify it under the terms of the GNU
@@ -95,7 +95,7 @@ void setup(void) {
   imu.setAccelScale(2); //sets the acceleration scale to +/- 2g
   
   // set up netsender
-  NetSender::BinaryReader = dofReader;
+  NetSender::PostReader = dofReader;
   NetSender::init();
   
   chunk.nSamples = 800;

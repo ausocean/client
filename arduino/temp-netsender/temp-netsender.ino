@@ -13,16 +13,14 @@ DESCRIPTION
     X51 = DHT humidity
     X60 = Dallas temperature (DS18B20, etc.)
     X70 = TSL2951 Light Sensor
+    T1  = GPS GPGGA
     
   Temperatures are reported in degrees Kelvin times 10. Humidity is
   reported as a percentage times 10, i.e., 482 for 48.2% A value of -1
   is returned upon failure.
 
-SEE ALSO
-  NetReceiver help: http://netreceiver.appspot.com/help.
-
 LICENSE
-  Copyright (C) 2019 the Australian Ocean Lab (AusOcean).
+  Copyright (C) 2019-2025 the Australian Ocean Lab (AusOcean).
 
   This is free software: you can redistribute it and/or modify it
   under the terms of the GNU General Public License as published by
@@ -45,17 +43,23 @@ LICENSE
 #include <DallasTemperature.h>
 #include <Adafruit_TSL2591.h>
 
-
 #define MAX_FAILURES 10
 #ifdef ESP8266
 #define DHTPIN       12
 #define DTPIN        13
+#define RXPIN        3
+#define TXPIN        -1
+#define GPSUART      1
 #else
 #define DHTPIN       14
 #define DTPIN        13
+#define RXPIN        34
+#define TXPIN        -1
+#define GPSUART      2
 #define SDA          16
 #define SCL          17
 #endif
+
 #define ZERO_CELSIUS 273.15 // In Kelvin.
 static constexpr auto tslMax{4294966000.0}; // Saturated max value for TSL2951.
 
@@ -65,6 +69,9 @@ OneWire onewire(DTPIN);
 DallasTemperature dt(&onewire); // external device #6
 static constexpr auto TSL_ID{70};
 Adafruit_TSL2591 tsl(TSL_ID);
+
+#define MAX_NMEA 83
+char NMEASentence[MAX_NMEA];
 
 int varsum = 0;
 int failures = 0;
@@ -128,8 +135,56 @@ int tempReader(NetSender::Pin *pin) {
   return pin->value;
 }
 
+// gpsReader reads GPS data on Serial 2 and sets the T1 pin value to the most recent GPGGA sentence,
+// or -1 otherwise.
+int gpsReader(NetSender::Pin *pin) {
+  bool readGPGGA = false;
+  String buf = "";
+
+  pin->value = -1;
+  if (strcmp(pin->name, "T1") != 0) {
+    return -1;
+  }
+
+  while (Serial2.available()) {
+    char c = Serial2.read();
+
+    if (c == '$') {
+      // Start buffering a new sentence.
+      buf = "";
+      buf += c;
+
+    } else if (c == '\n') {
+      buf += c;
+      if (buf.startsWith("$GPGGA")) {
+       // We have a complete GPGGA sentence, so save it.
+       strcpy(NMEASentence, buf.c_str());
+       readGPGGA = true;
+      }
+      buf = "";
+
+    } else if (buf.length() > 0) {
+      // Append only if we are currently buffering.
+      buf += c;
+    }
+
+    // Ignore malformed NMEA sentences.
+    if (buf.length() >= MAX_NMEA) {
+      buf = "";
+    }
+  }
+
+  if (!readGPGGA) {
+    return -1;
+  }
+
+  pin->value = strlen(NMEASentence);
+  pin->data = (byte*)NMEASentence;
+  return pin->value;
+}
+
 // required Arduino routines
-// NB: setup runs everytime ESP8266 comes out of a deep sleep
+// NB: setup runs everytime ESP comes out of a deep sleep
 void setup() {
   dht.begin();
   dt.begin();
@@ -137,7 +192,9 @@ void setup() {
   tsl.setGain(TSL2591_GAIN_LOW);
   tsl.setTiming(TSL2591_INTEGRATIONTIME_100MS);
   tsl.begin();
+  Serial2.begin(9600, SERIAL_8N1, RXPIN, TXPIN);
   NetSender::ExternalReader = &tempReader;
+  NetSender::PostReader = &gpsReader;
   NetSender::init();
   loop();
 }

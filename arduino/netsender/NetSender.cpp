@@ -156,7 +156,7 @@ bool Configured = false;
 char MacAddress[MAC_SIZE];
 Configuration Config;
 ReaderFunc ExternalReader = NULL;
-ReaderFunc BinaryReader = NULL;
+ReaderFunc PostReader = NULL;
 int VarSum = 0;
 HandlerManager Handlers;
 unsigned long RefTimestamp = 0;
@@ -263,7 +263,9 @@ bool isValidPinName(const char *name, size_t len) {
   }
   switch(name[0]) {
   case 'A':
+  case 'B':
   case 'D':
+  case 'T':
   case 'X':
     if (!isdigit(name[1])) {
       return false;
@@ -383,7 +385,7 @@ void initPins(bool startup) {
 }
 
 // readPin reads a pin value and returns it, or -1 upon error.
-// The data field will be set in the case of binary data, otherwise it will be NULL.
+// The data field will be set in the case of POST data, otherwise it will be NULL.
 // When SimulatedBat is non-zero, this value is returned as the value for BAT_PIN one time only.
 // The following call to read BAT_PIN will therefore always return the actual value.
 int readPin(Pin * pin) {
@@ -409,9 +411,10 @@ int readPin(Pin * pin) {
       pin->value = analogRead(pn);
     }
     break;
+  case 'T':
   case 'B':
-    if (BinaryReader != NULL) {
-      pin->value = (*BinaryReader)(pin);
+    if (PostReader != NULL) {
+      pin->value = (*PostReader)(pin);
     }
     break;
   case 'D':

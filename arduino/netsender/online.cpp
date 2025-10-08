@@ -299,7 +299,7 @@ bool OnlineHandler::request(RequestType req, Pin * inputs, Pin * outputs, bool *
         continue;
       }
       sprintf(path + strlen(path), "&%s=%d", inputs[ii].name, inputs[ii].value);
-      // Populate the body with binary data, if any.
+      // Populate the body with POST data, if any.
       if (inputs[ii].data != NULL && inputs[ii].value > 0) {
         body += String((const char*)(inputs[ii].data));
       }
