@@ -135,6 +135,34 @@ int tempReader(NetSender::Pin *pin) {
   return pin->value;
 }
 
+// isValidNMEA returns true if the NMEA sentence is valid.
+bool isValidNMEA(String& sentence) {
+  sentence.trim();
+  if (sentence.isEmpty()) {
+    return false;
+  }
+  if (sentence[0] != '$') {
+    return false;
+  }
+  int checksumPos = sentence.indexOf('*');
+  if (checksumPos == -1) {
+    return false;
+  }
+  if (sentence.substring(checksumPos+1).length() < 2) {
+    return false;
+  }
+  // Extract the supplied checksum.
+  unsigned int suppliedChecksum = strtol(sentence.substring(checksumPos+1, checksumPos+3).c_str(), NULL, 16);
+
+  // Compute the checksum by XORing everything between the '$' and '*'.
+  unsigned int computedChecksum = 0;
+  for (int i = 1; i < checksumPos; i++) {
+    computedChecksum ^= sentence.charAt(i);
+  }
+
+  return (computedChecksum == suppliedChecksum);
+}
+
 // gpsReader reads GPS data on Serial 2 and sets the T1 pin value to the most recent GPGGA sentence,
 // or -1 otherwise.
 int gpsReader(NetSender::Pin *pin) {
@@ -156,8 +184,8 @@ int gpsReader(NetSender::Pin *pin) {
 
     } else if (c == '\n') {
       buf += c;
-      if (buf.startsWith("$GPGGA")) {
-       // We have a complete GPGGA sentence, so save it.
+      if (buf.startsWith("$GPGGA") && isValidNMEA(buf)) {
+       // We have a valid GPGGA sentence, so save it.
        strcpy(NMEASentence, buf.c_str());
        readGPGGA = true;
       }
