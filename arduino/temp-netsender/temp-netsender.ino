@@ -42,20 +42,19 @@ LICENSE
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include <Adafruit_TSL2591.h>
-#include <HardwareSerial.h>
 
 #define MAX_FAILURES 10
 #ifdef ESP8266
 #define DHTPIN       12
 #define DTPIN        13
 #define RXPIN        3
-#define TXPIN        1
+#define TXPIN        -1
 #define GPSUART      1
 #else
 #define DHTPIN       14
 #define DTPIN        13
-#define RXPIN        16
-#define TXPIN        17
+#define RXPIN        34
+#define TXPIN        -1
 #define GPSUART      2
 #define SDA          16
 #define SCL          17
@@ -70,7 +69,6 @@ OneWire onewire(DTPIN);
 DallasTemperature dt(&onewire); // external device #6
 static constexpr auto TSL_ID{70};
 Adafruit_TSL2591 tsl(TSL_ID);
-HardwareSerial GPS_Serial(GPSUART);
 
 #define MAX_NMEA 83
 char NMEASentence[MAX_NMEA];
@@ -137,7 +135,7 @@ int tempReader(NetSender::Pin *pin) {
   return pin->value;
 }
 
-// gpsReader reads GPS data and sets the T1 pin value to the most recent GPGGA sentence,
+// gpsReader reads GPS data on Serial 2 and sets the T1 pin value to the most recent GPGGA sentence,
 // or -1 otherwise.
 int gpsReader(NetSender::Pin *pin) {
   bool readGPGGA = false;
@@ -148,8 +146,8 @@ int gpsReader(NetSender::Pin *pin) {
     return -1;
   }
 
-  while (GPS_Serial.available()) {
-    char c = GPS_Serial.read();
+  while (Serial2.available()) {
+    char c = Serial2.read();
 
     if (c == '$') {
       // Start buffering a new sentence.
@@ -171,7 +169,7 @@ int gpsReader(NetSender::Pin *pin) {
     }
 
     // Ignore malformed NMEA sentences.
-    if (buf.length() > MAX_NMEA) {
+    if (buf.length() >= MAX_NMEA) {
       buf = "";
     }
   }
@@ -194,7 +192,7 @@ void setup() {
   tsl.setGain(TSL2591_GAIN_LOW);
   tsl.setTiming(TSL2591_INTEGRATIONTIME_100MS);
   tsl.begin();
-  GPS_Serial.begin(9600, SERIAL_8N1, RXPIN, TXPIN);
+  Serial2.begin(9600, SERIAL_8N1, RXPIN, TXPIN);
   NetSender::ExternalReader = &tempReader;
   NetSender::PostReader = &gpsReader;
   NetSender::init();
