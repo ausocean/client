@@ -6,9 +6,8 @@ toolchain go1.23.3
 
 require (
 	github.com/Shopify/toxiproxy v2.1.4+incompatible
-	github.com/adrianmo/go-nmea v1.8.0
 	github.com/andreyvit/diff v0.0.0-20170406064948-c7f18ee00883
-	github.com/ausocean/utils v0.3.2
+	github.com/ausocean/utils v0.3.3
 	github.com/d2r2/go-dht v0.0.0-20200119175940-4ba96621a218
 	github.com/jacobsa/go-serial v0.0.0-20180131005756-15cf729a72d4
 	github.com/kidoman/embd v0.0.0-20170508013040-d3d8c0c5c68d
@@ -22,6 +21,7 @@ require (
 
 require (
 	git.sr.ht/~sbinet/gg v0.5.0 // indirect
+	github.com/adrianmo/go-nmea v1.10.0 // indirect
 	github.com/ajstarks/svgo v0.0.0-20211024235047-1546f124cd8b // indirect
 	github.com/campoy/embedmd v1.0.0 // indirect
 	github.com/d2r2/go-logger v0.0.0-20210606094344-60e9d1233e22 // indirect

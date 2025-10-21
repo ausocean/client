@@ -35,32 +35,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/adrianmo/go-nmea"
 	"github.com/jacobsa/go-serial/serial"
 
 	"github.com/ausocean/client/pi/netsender"
 	"github.com/ausocean/client/pi/smartlogger"
 	"github.com/ausocean/utils/logging"
+	"github.com/ausocean/utils/nmea"
 )
-
-// GPSData stores data collected from NMEA sentences
-type GPSData struct {
-	Latitude         *float64   // Latitude
-	Longitude        *float64   // Longitude
-	LastFixTime      *time.Time // Time of last GPS fix
-	Speed            *float64   // Speed in knots
-	Course           *float64   // True course
-	Variation        *float64   // Magnetic variation
-	FixQuality       *string    // Quality of fix.
-	NumSatellites    *int64     // Number of satellites in use.
-	Altitude         *float64   // Altitude.
-	TrueTrack        *float64   // True track made good (degrees)
-	MagneticTrack    *float64   // Magnetic track made good
-	GroundSpeedKnots *float64   // Ground speed in Knots
-	GroundSpeedKPH   *float64   // Ground speed in km/hr
-	Heading          *float64   // Heading in degrees
-	True             *bool      // Heading is relative to true north
-}
 
 // parameters are variables defined on NetReceiver instances
 type parameters struct {
@@ -106,9 +87,9 @@ func main() {
 	// Create logger
 	logSender := smartlogger.New(*logPath)
 	log = logging.New(int8(*logLevel), &logSender.LogRoller, true)
-	log.Info( "log-netsender: Logger Initialized")
+	log.Info("log-netsender: Logger Initialized")
 	if !validLogLevel {
-		log.Error( "Invalid log level was defaulted to Info")
+		log.Error("Invalid log level was defaulted to Info")
 	}
 
 	// Open serial port
@@ -121,11 +102,11 @@ func main() {
 	}
 	port, err := serial.Open(options)
 	if err != nil {
-		log.Error( "serial.Open failed", "error", err.Error())
+		log.Error("serial.Open failed", "error", err.Error())
 		os.Exit(1)
 	}
 	defer port.Close()
-	log.Info( "Opened serial port")
+	log.Info("Opened serial port")
 
 	gc := gpsClient{
 		parameters: defaultParams,
@@ -134,14 +115,14 @@ func main() {
 	// Start NetSender
 	gc.ns, err = netsender.New(log, nil, nil, nil, netsender.WithConfigFile(*configFile))
 	if err != nil {
-		log.Error( "netsender.New failed", "error", err.Error())
+		log.Error("netsender.New failed", "error", err.Error())
 		os.Exit(1)
 	}
 
 	// Define synchronously initial vars
 	v, err := gc.ns.Vars()
 	if err != nil {
-		log.Warning( "netsender.Vars failed", "error", err.Error())
+		log.Warning("netsender.Vars failed", "error", err.Error())
 	}
 	params, _ := gc.updateVars(gc.parameters, v)
 	gc.parameters = params
@@ -149,7 +130,7 @@ func main() {
 
 	// Data channels
 	raw := make(chan string, sentenceBufferSize)
-	data := make(chan GPSData, 1) // buffer a single data object
+	data := make(chan nmea.GPSData, 1) // buffer a single data object
 	vars := make(chan parameters)
 
 	// Define initial config
@@ -178,7 +159,7 @@ func (gc *gpsClient) checkVars(vars chan parameters) {
 
 		v, err := gc.ns.Vars()
 		if err != nil {
-			log.Warning( "netsender.Vars failed", "error", err.Error())
+			log.Warning("netsender.Vars failed", "error", err.Error())
 			continue
 		}
 
@@ -213,107 +194,20 @@ func (gc *gpsClient) updateVars(params parameters, vars map[string]string) (para
 func (gc *gpsClient) reconfig() {
 	_, err := gc.ns.Config()
 	if err != nil {
-		log.Warning( "netsender.Config failed", "error", err.Error())
+		log.Warning("netsender.Config failed", "error", err.Error())
 		return
 	}
 	gc.ip = gc.ns.Param("ip")
 }
 
-func processSentence(dst GPSData, raw string) GPSData {
-	s, err := nmea.Parse(raw)
-	if err != nil {
-		log.Warning( "Failed to process sentence", "error", err.Error())
-		return dst
-	}
-
-	log.Debug( "Processed sentence", "sentence", raw)
-
-	switch s := s.(type) {
-	case nmea.RMC:
-		if s.Validity != "A" {
-			// Not valid data
-			log.Info( "Invalid data", "type", s.Prefix())
-			return dst
-		}
-
-		newFix := time.Date(
-			s.Date.YY,
-			time.Month(s.Date.MM),
-			s.Date.DD,
-			s.Time.Hour,
-			s.Time.Minute,
-			s.Time.Second,
-			s.Time.Millisecond*1000000,
-			time.UTC,
-		)
-
-		// Valid, update
-		dst.Latitude = &s.Latitude
-		dst.Longitude = &s.Longitude
-		dst.Speed = &s.Speed
-		dst.Course = &s.Course
-		dst.Variation = &s.Variation
-		dst.LastFixTime = &newFix
-	case nmea.GGA:
-		currentTime := time.Now()
-		newFix := time.Date(
-			currentTime.Year(),
-			currentTime.Month(),
-			currentTime.Day(),
-			s.Time.Hour,
-			s.Time.Minute,
-			s.Time.Second,
-			s.Time.Millisecond*1000000,
-			time.UTC,
-		)
-		dst.Latitude = &s.Latitude
-		dst.Longitude = &s.Longitude
-		dst.FixQuality = &s.FixQuality
-		dst.NumSatellites = &s.NumSatellites
-		dst.Altitude = &s.Altitude
-		dst.LastFixTime = &newFix
-	case nmea.GLL:
-		if s.Validity != "A" {
-			// Not valid data
-			log.Info( "Invalid data", "type", s.Prefix())
-			return dst
-		}
-
-		currentTime := time.Now()
-		newFix := time.Date(
-			currentTime.Year(),
-			currentTime.Month(),
-			currentTime.Day(),
-			s.Time.Hour,
-			s.Time.Minute,
-			s.Time.Second,
-			s.Time.Millisecond*1000000,
-			time.UTC,
-		)
-		dst.Latitude = &s.Latitude
-		dst.Longitude = &s.Longitude
-		dst.LastFixTime = &newFix
-	case nmea.VTG:
-		dst.TrueTrack = &s.TrueTrack
-		dst.MagneticTrack = &s.MagneticTrack
-		dst.GroundSpeedKnots = &s.GroundSpeedKnots
-		dst.GroundSpeedKPH = &s.GroundSpeedKPH
-	case nmea.HDT:
-		dst.Heading = &s.Heading
-		dst.True = &s.True
-	case nmea.ZDA, nmea.PGRME, nmea.GSV, nmea.GSA:
-		log.Debug( "Sentence not implemented", "sentence", s.Prefix())
-	default:
-		log.Warning( "Failure to read parsed sentence", "sentence", s.String())
-	}
-
-	return dst
-}
-
-func parseSentences(raw chan string, data chan GPSData) {
-	lastData := GPSData{}
+func parseSentences(raw chan string, data chan nmea.GPSData) {
+	lastData := nmea.GPSData{}
 	for r := range raw {
-		lastData = processSentence(lastData, r)
+		lastData, err := nmea.ProcessSentence(lastData, r)
+		if err != nil {
+			log.Error("Failed to process NMEA sentence", "error", err.Error())
+			continue
+		}
 		select {
 		case data <- lastData:
 		default:
@@ -327,8 +221,8 @@ func parseSentences(raw chan string, data chan GPSData) {
 	}
 }
 
-func (gc *gpsClient) send(data chan GPSData, vars chan parameters) {
-	log.Info( "Starting send worker")
+func (gc *gpsClient) send(data chan nmea.GPSData, vars chan parameters) {
+	log.Info("Starting send worker")
 
 	pins := netsender.MakePins(gc.ip, "T")
 	params := gc.parameters
@@ -343,7 +237,7 @@ func (gc *gpsClient) send(data chan GPSData, vars chan parameters) {
 
 		msg, err := json.Marshal(d)
 		if err != nil {
-			log.Fatal( "Failed to generate json", "error", err.Error())
+			log.Fatal("Failed to generate json", "error", err.Error())
 		}
 
 		for i, pin := range pins {
@@ -356,7 +250,7 @@ func (gc *gpsClient) send(data chan GPSData, vars chan parameters) {
 
 		_, rc, err := gc.ns.Send(netsender.RequestPoll, pins)
 		if err != nil {
-			log.Error( "netsender.Send failed", "error", err.Error())
+			log.Error("netsender.Send failed", "error", err.Error())
 		} else if rc == netsender.ResponseUpdate {
 			gc.reconfig()
 		}
@@ -366,13 +260,13 @@ func (gc *gpsClient) send(data chan GPSData, vars chan parameters) {
 }
 
 func (gc *gpsClient) readGPS(port io.ReadWriteCloser, raw chan string) {
-	log.Info( "Starting to read from serial port")
+	log.Info("Starting to read from serial port")
 	r := make([]byte, 32)
 	var b strings.Builder
 	for {
 		n, err := port.Read(r)
 		if err != nil {
-			log.Warning( "Error reading from serial port", "error", err.Error())
+			log.Warning("Error reading from serial port", "error", err.Error())
 		}
 		if n > 0 {
 			r = r[:n]
@@ -401,7 +295,7 @@ func processBuffer(r []byte, b *strings.Builder, raw chan string) {
 				default:
 				}
 				raw <- line
-				log.Warning( "Dropped a sentence")
+				log.Warning("Dropped a sentence")
 			}
 
 			// Reset buffer and continue
