@@ -2,58 +2,107 @@
 #include <SD.h>
 #include <Wire.h>
 #include <ESP_I2S.h>
+#include <WiFi.h>
+#include <WiFiUdp.h>
 
-#define SD_CS_PIN     15 
-#define SPI_SCLK_PIN  14 
-#define SPI_MISO_PIN  12 
-#define SPI_MOSI_PIN  13 
+#define SD_CS_PIN 15
+#define SPI_SCLK_PIN 14
+#define SPI_MISO_PIN 12
+#define SPI_MOSI_PIN 13
 
-#define I2S_SCK_PIN   33 
-#define I2S_DOUT_PIN  23 
-#define I2S_WS_PIN    32 
+#define I2S_SCK_PIN 33
+#define I2S_DOUT_PIN 23
+#define I2S_WS_PIN 32
 
-#define I2C_SDA_PIN   16
-#define I2C_SCL_PIN   18
+#define I2C_SDA_PIN 16
+#define I2C_SCL_PIN 18
 
-#define AMP_ADDRESS   0x2D // 0b0101101
+#define AMP_ADDRESS 0x2D  // 0b0101101
 
 I2SClass i2s;
 File audioFile;
 
+const char* ssid = "netreceiver";
+const char* password = "netsender";
+
+unsigned int localPort = 12312;  // local port to listen on
+
+WiFiUDP Udp;
+
+void logUDP(String message) {
+    // 1. Start the packet to the target IP and Port
+    if (Udp.beginPacket(IPAddress(10, 239, 130, 59), 12312)) {
+        
+        // 2. Write the message
+        Udp.print(message);
+        
+        // 3. Finalize and send
+        Udp.endPacket();
+        
+        // Optional: Also print to Serial for local debugging
+        Serial.println("UDP Sent: " + message);
+    } else {
+        Serial.println("UDP Connection Failed");
+    }
+}
+
 void setup() {
   Serial.begin(115200);
-  while(!Serial && (millis() < 5000));
+  while (!Serial && (millis() < 5000))
+    ;
 
-  SPI.begin(SPI_SCLK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN);
-  if (!SD.begin(SD_CS_PIN)) {
-    Serial.println("SD Initialisation failed!");
-    while(true);
+  WiFi.mode(WIFI_STA);  //Optional
+  WiFi.begin(ssid, password);
+  Serial.println("\nConnecting");
+
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.print(".");
+    delay(100);
   }
 
-  if(!Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN)) {
-    Serial.println("I2C initialisation failed!");
-    while(true);
-  }
+  Serial.println("\nConnected to the WiFi network");
+  Serial.print("Local ESP32 IP: ");
+  Serial.println(WiFi.localIP());
 
-  // Set pins before begin() for ESP32 v3.x
-  i2s.setPins(I2S_SCK_PIN, I2S_WS_PIN, I2S_DOUT_PIN);
+  Udp.begin(localPort);
 
-  if (!i2s.begin(I2S_MODE_STD, 44100, I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO)) {
-    Serial.println("I2S Initialisation failed!");
-    while(true);
-  }
+  // if (!SPI.begin(SPI_SCLK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN)) {
+  //   Serial.println("SPI Init failed!");
+  //   while (true)
+  //     ;
+  // }
+  // if (!SD.begin(SD_CS_PIN)) {
+  //   Serial.println("SD Initialisation failed!");
+  //   while (true)
+  //     ;
+  // }
 
-  // This must be done after a stable I2S clock is running.
-  init_amp();
+  // if (!Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN)) {
+  //   Serial.println("I2C initialisation failed!");
+  //   while (true)
+  //     ;
+  // }
 
-  
-  Serial.println("Ready. Opening audio.wav...");
+  // // Set pins before begin() for ESP32 v3.x
+  // i2s.setPins(I2S_SCK_PIN, I2S_WS_PIN, I2S_DOUT_PIN);
+
+  // if (!i2s.begin(I2S_MODE_STD, 44100, I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO)) {
+  //   Serial.println("I2S Initialisation failed!");
+  //   while (true)
+  //     ;
+  // }
+
+  // // This must be done after a stable I2S clock is running.
+  // init_amp();
+
+
+  // Serial.println("Ready. Opening audio.wav...");
 }
 
 int init_amp() {
   // Select Page 0.
   Wire.beginTransmission(AMP_ADDRESS);
-  Wire.write(0x00); 
+  Wire.write(0x00);
   Wire.write(0x00);
   if (Wire.endTransmission() != 0) return 1;
 
@@ -79,8 +128,8 @@ int init_amp() {
         = 0b0000 0100 = 0x04
   */
   Wire.beginTransmission(AMP_ADDRESS);
-  Wire.write(0x02); // Register
-  Wire.write(0x04); // Config
+  Wire.write(0x02);  // Register
+  Wire.write(0x04);  // Config
   Wire.endTransmission();
 
   /* Set device analog gain - offset: 54h
@@ -91,17 +140,17 @@ int init_amp() {
   */
   Wire.beginTransmission(AMP_ADDRESS);
   Wire.write(0x54);
-  Wire.write(0x00);
+  Wire.write(0x1D);
   Wire.endTransmission();
 
   /* Set device digital volume - offset: 4Ch
       Bits:
-        7-0:  00000000   - MAX Digital Volume
+        7-0:  00110000   - MAX Digital Volume
         = 0b0010 0000 = 0x00
   */
   Wire.beginTransmission(AMP_ADDRESS);
   Wire.write(0x4C);
-  Wire.write(0x00);
+  Wire.write(0x7D);
   Wire.endTransmission();
 
   /* Set device settings (2) - offset: 03h
@@ -112,7 +161,7 @@ int init_amp() {
         2:    0   - Reserved
         1-0:  11  - Play (CTRL_STATE)
         = 0b0000 0011 = 0x03
-  */  
+  */
   Wire.beginTransmission(AMP_ADDRESS);
   Wire.write(0x03);
   Wire.write(0x03);
@@ -125,37 +174,51 @@ int init_amp() {
 }
 
 void loop() {
-  audioFile = SD.open("/audio.wav");
-
-  if (!audioFile) {
-    Serial.println("Failed to open audio.wav");
-    delay(5000);
-    return;
-  }
-
-  // Skip the WAV header (44 bytes) to get to raw PCM data
-  audioFile.seek(44);
-
-  // Buffer for reading data (must be a multiple of 4 bytes for 16-bit stereo)
-  const size_t bufferSize = 512;
-  uint8_t buffer[bufferSize];
-
-  Serial.println("Playing...");
-
-  while (audioFile.available()) {
-    size_t bytesRead = audioFile.read(buffer, bufferSize);
+  Serial.println("Writing msg via UDP");
+    // 1. Start the packet (Note: use commas for IPAddress, not strings)
+    Udp.beginPacket(IPAddress(10,239,130,59), localPort);
     
-    // Write to I2S. This function blocks until there is space in the DMA buffer.
-    size_t bytesWritten = i2s.write(buffer, bytesRead);
+    // 2. Write the "alive" message
+    Udp.println("Alive"); 
+    
+    // 3. Finalize and send
+    Udp.endPacket();
 
-    if (bytesWritten == 0) {
-      Serial.println("I2S write error");
-      break;
-    }
-  }
+    // 4. Wait (e.g., 5 seconds) so you don't flood the network
+    delay(5000);
 
-  Serial.println("Playback finished.");
-  audioFile.close();
-  
-  delay(2000); // Wait 2 seconds before looping the file again
+
+  // audioFile = SD.open("/audio.wav");
+
+  // if (!audioFile) {
+  //   Serial.println("Failed to open audio.wav");
+  //   delay(5000);
+  //   return;
+  // }
+
+  // // Skip the WAV header (44 bytes) to get to raw PCM data
+  // audioFile.seek(44);
+
+  // // Buffer for reading data (must be a multiple of 4 bytes for 16-bit stereo)
+  // const size_t bufferSize = 512;
+  // uint8_t buffer[bufferSize];
+
+  // Serial.println("Playing...");
+
+  // while (audioFile.available()) {
+  //   size_t bytesRead = audioFile.read(buffer, bufferSize);
+
+  //   // Write to I2S. This function blocks until there is space in the DMA buffer.
+  //   size_t bytesWritten = i2s.write(buffer, bytesRead);
+
+  //   if (bytesWritten == 0) {
+  //     Serial.println("I2S write error");
+  //     break;
+  //   }
+  // }
+
+  // Serial.println("Playback finished.");
+  // audioFile.close();
+
+  // delay(2000);  // Wait 2 seconds before looping the file again
 }
