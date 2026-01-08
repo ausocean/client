@@ -28,17 +28,18 @@
 #define NetSender_H
 
 #include "Arduino.h"
+#include <optional>
 
 namespace NetSender {
 
 #ifdef ESP8266
-#define VERSION                190
+#define VERSION                191
 #define MAX_PINS               10
 #define DKEY_SIZE              20
 #define RESERVED_SIZE          48
 #endif
 #if defined ESP32 || defined __linux__
-#define VERSION                10020
+#define VERSION                10021
 #define MAX_PINS               20
 #define DKEY_SIZE              32
 #define RESERVED_SIZE          64
@@ -145,12 +146,12 @@ typedef struct {
 // Pin represents a pin name and value and optional POST data.
 typedef struct {
   char name [PIN_SIZE];
-  int value;
+  std::optional<int> value; // std::nullopt indicates no invalid or no value.
   byte * data;
 } Pin;
 
 // ReaderFunc represents a pin reading function.
-typedef int (*ReaderFunc)(Pin *);
+typedef std::optional<int> (*ReaderFunc)(Pin *);
 
 // BaseHandler defines our abstract base handler class.
 class BaseHandler {

@@ -76,11 +76,11 @@ char NMEASentence[MAX_NMEA];
 int varsum = 0;
 int failures = 0;
 
-// tempReader is the pin reader that polls either the DHT, Dallas Temperature device, or Photometer.
-int tempReader(NetSender::Pin *pin) {
-  pin->value = -1;
+// tempReader is the pin reader that polls either the DHT, Dallas Temperature device or Photometer.
+std::optional<int> tempReader(NetSender::Pin *pin) {
+  pin->value = std::nullopt;
   if (pin->name[0] != 'X') {
-    return -1;
+    return std::nullopt;
   }
   if (failures >= MAX_FAILURES) {
     Serial.println(F("Reinializing DHT and DT sensors"));
@@ -97,7 +97,7 @@ int tempReader(NetSender::Pin *pin) {
     ff = dht.readTemperature();
     if (isnan(ff)) {
       failures++;
-      return -1;
+      return std::nullopt;
     } else {
       pin->value = 10 * (ff + ZERO_CELSIUS);
       break;
@@ -106,7 +106,7 @@ int tempReader(NetSender::Pin *pin) {
     ff = dht.readHumidity();
     if (isnan(ff)) {
       failures++;
-      return -1;
+      return std::nullopt;
     } else {
       pin->value = 10 * ff;
       break;
@@ -116,7 +116,7 @@ int tempReader(NetSender::Pin *pin) {
     ff = dt.getTempCByIndex(0);
     if (isnan(ff) || ff <= -127) {
       failures++;
-      return -1;
+      return std::nullopt;
     } else {
       pin->value = 10 * (ff + ZERO_CELSIUS);
       break;
@@ -125,12 +125,12 @@ int tempReader(NetSender::Pin *pin) {
     lum = tsl.getLuminosity(TSL2591_FULLSPECTRUM);
     if ((lum <= 0) || isnan(lum)) {
       failures++;
-      return -1;
+      return std::nullopt;
     }
     pin->value = lum;
     break;
   default:
-    return -1; 
+    return std::nullopt; 
   }
   return pin->value;
 }
@@ -165,13 +165,13 @@ bool isValidNMEA(String& sentence) {
 
 // gpsReader reads GPS data on Serial 2 and sets the T1 pin value to the most recent GPGGA sentence,
 // or -1 otherwise.
-int gpsReader(NetSender::Pin *pin) {
+std::optional<int> gpsReader(NetSender::Pin *pin) {
   bool readGPGGA = false;
   String buf = "";
 
-  pin->value = -1;
+  pin->value = std::nullopt;
   if (strcmp(pin->name, "T1") != 0) {
-    return -1;
+    return std::nullopt;
   }
 
   while (Serial2.available()) {
@@ -203,7 +203,7 @@ int gpsReader(NetSender::Pin *pin) {
   }
 
   if (!readGPGGA) {
-    return -1;
+    return std::nullopt;
   }
 
   pin->value = strlen(NMEASentence);

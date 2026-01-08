@@ -157,12 +157,12 @@ bool OfflineHandler::request(RequestType req, Pin * inputs, Pin * outputs, bool 
   char filename[sizeof(datafile::dirNSD)+PIN_SIZE+1];
 
   for (int ii = 0; ii < MAX_PINS && inputs[ii].name[0] != '\0'; ii++) {
-    if (inputs[ii].value < 0) {
-      log(logDebug, "Not saving negative value for %s", inputs[ii].name);
+    if (!inputs[ii].value.has_value()) {
+      log(logDebug, "Not saving null value for %s", inputs[ii].name);
       continue;
     }
 
-    log(logDebug, "Saving %s=%d @ %lu (%lu+%lu)", inputs[ii].name, inputs[ii].value, RefTimestamp+t, RefTimestamp, t);
+    log(logDebug, "Saving %s=%d @ %lu (%lu+%lu)", inputs[ii].name, inputs[ii].value.value(), RefTimestamp+t, RefTimestamp, t);
 
     // Append data to a binary file with the name of the pin.
     strcpy(filename, datafile::dirNSD);
@@ -185,7 +185,7 @@ bool OfflineHandler::request(RequestType req, Pin * inputs, Pin * outputs, bool 
       }
     }
 
-    if (!writeRecord(file, inputs[ii].value, RefTimestamp+t)) {
+    if (!writeRecord(file, inputs[ii].value.value(), RefTimestamp+t)) {
       log(logError, "Could not write data to SD card file %s", filename);
       ok = false;
     }
