@@ -14,7 +14,7 @@ DESCRIPTION
     X60 = Dallas temperature (DS18B20, etc.)
     X70 = TSL2951 Light Sensor
     T1  = GPS GPGGA
-    
+
   Temperatures are reported in degrees Kelvin times 10. Humidity is
   reported as a percentage times 10, i.e., 482 for 48.2% A value of -1
   is returned upon failure.
@@ -40,12 +40,14 @@ LICENSE
 // Uncomment sensor enable flags to enable
 #define ENABLE_DHT_SENSOR
 #define ENABLE_DALLAS_TEMP_SENSOR
+#define ENABLE_TSL2591_SENSOR
+#define ENABLE_GPS_SENSOR
 
 
 // If DHT enabled, define type and hardware pins depending on ESP8266 or ESP32
 #ifdef ENABLE_DHT_SENSOR
   #include "DHT.h"
-  #define DHTTYPE DHT22 // external device #5 
+  #define DHTTYPE DHT22 // external device #5
 
   #ifdef ESP8266
     #define DHTPIN       12
@@ -64,26 +66,51 @@ LICENSE
   #endif
 #endif
 
+// If TSL2591 Photometer enabled, define hardware pins (only for ESP32)
+#ifdef ENABLE_TSL2591_SENSOR
+  #include "tsl2591.h"
+  #ifdef ESP32
+    #define SDA          16
+    #define SCL          17
+  #endif
+#endif
+
+// If GPS enabled, define hardware pins depending on ESP8266 or ESP32
+#ifdef ENABLE_GPS_SENSOR
+  #include "gps.h"
+  #ifdef ESP8266
+    #define RXPIN        3
+    #define TXPIN        -1
+  #else
+    #define RXPIN        34
+    #define TXPIN        -1
+  #endif
+#endif
+
+
 #include <vector>
 #include "NetSender.h"
 
 #include "sensor.h"
 
-// Vector to store all sensor objects
-std::vector<Sensor*> sensors;
+// Vector to store all software sensor (X pins) objects
+std::vector<Sensor*> softwareSensors;
 
-// reader is the pin reader that polls available sensors
-std::optional<int> reader(NetSender::Pin *pin) {
+// Vector to store all binary Sensors (T pins) objects
+std::vector<Sensor*> binarySensors;
+
+// reader is the pin reader that polls available software sensors
+std::optional<int> softwareReader(NetSender::Pin *pin) {
   pin->value = std::nullopt;
   if (pin->name[0] != 'X') {
     return std::nullopt;
   }
-
   auto requestedPin = atoi(pin->name + 1);
-  for (Sensor* sensor : sensors) {
-    auto res = sensor->read(requestedPin);
-    if(res.has_value()) {
-      pin->value = res;
+  for (Sensor* sensor : softwareSensors) {
+    auto _pin = sensor->read(requestedPin);
+    if(_pin.has_value()) {
+      pin->value = _pin.value().value;
+      pin->data = _pin.value().data;
       break;
     }
   }
@@ -91,101 +118,45 @@ std::optional<int> reader(NetSender::Pin *pin) {
   return pin->value;
 }
 
-// isValidNMEA returns true if the NMEA sentence is valid.
-bool isValidNMEA(String& sentence) {
-  sentence.trim();
-  if (sentence.isEmpty()) {
-    return false;
-  }
-  if (sentence[0] != '$') {
-    return false;
-  }
-  int checksumPos = sentence.indexOf('*');
-  if (checksumPos == -1) {
-    return false;
-  }
-  if (sentence.substring(checksumPos+1).length() < 2) {
-    return false;
-  }
-  // Extract the supplied checksum.
-  unsigned int suppliedChecksum = strtol(sentence.substring(checksumPos+1, checksumPos+3).c_str(), NULL, 16);
-
-  // Compute the checksum by XORing everything between the '$' and '*'.
-  unsigned int computedChecksum = 0;
-  for (int i = 1; i < checksumPos; i++) {
-    computedChecksum ^= sentence.charAt(i);
-  }
-
-  return (computedChecksum == suppliedChecksum);
-}
-
-// gpsReader reads GPS data on Serial 2 and sets the T1 pin value to the most recent GPGGA sentence,
-// or -1 otherwise.
-std::optional<int> gpsReader(NetSender::Pin *pin) {
-  bool readGPGGA = false;
-  String buf = "";
-
+std::optional<int> binaryReader(NetSender::Pin *pin) {
   pin->value = std::nullopt;
-  if (strcmp(pin->name, "T1") != 0) {
+  if (pin->name[0] != 'T') {
     return std::nullopt;
   }
-
-  while (Serial2.available()) {
-    char c = Serial2.read();
-
-    if (c == '$') {
-      // Start buffering a new sentence.
-      buf = "";
-      buf += c;
-
-    } else if (c == '\n') {
-      buf += c;
-      if (buf.startsWith("$GPGGA") && isValidNMEA(buf)) {
-       // We have a valid GPGGA sentence, so save it.
-       strcpy(NMEASentence, buf.c_str());
-       readGPGGA = true;
-      }
-      buf = "";
-
-    } else if (buf.length() > 0) {
-      // Append only if we are currently buffering.
-      buf += c;
-    }
-
-    // Ignore malformed NMEA sentences.
-    if (buf.length() >= MAX_NMEA) {
-      buf = "";
+  auto requestedPin = atoi(pin->name +1);
+  for (Sensor* sensor : binarySensors) {
+    auto _pin = sensor->read(requestedPin);
+    if (_pin.has_value()) {
+      pin->value = _pin.value().value;
+      pin->data = _pin.value().data;
+      break;
     }
   }
 
-  if (!readGPGGA) {
-    return std::nullopt;
-  }
-
-  pin->value = strlen(NMEASentence);
-  pin->data = (byte*)NMEASentence;
   return pin->value;
 }
 
 // required Arduino routines
 // NB: setup runs everytime ESP comes out of a deep sleep
 void setup() {
-  Wire.begin(16,17);
-  tsl.setGain(TSL2591_GAIN_LOW);
-  tsl.setTiming(TSL2591_INTEGRATIONTIME_100MS);
-  tsl.begin();
-  Serial2.begin(9600, SERIAL_8N1, RXPIN, TXPIN);
-  NetSender::ExternalReader = &tempReader;
-  NetSender::PostReader = &gpsReader;
   #ifdef ENABLE_DHT_SENSOR
-    sensors.push_back(new DHT(DHTPIN, DHTTYPE, []() { Serial.println("DHT exceeded failures, restarting!");}));
+    softwareSensors.push_back(new DHT(DHTPIN, DHTTYPE, []() { Serial.println("DHT exceeded failures, restarting!");}));
   #endif
 
   #ifdef ENABLE_DALLAS_TEMP_SENSOR
-    sensors.push_back(new DallasTemp(DTPIN, []() { Serial.println("Dallas temp exceeded failures, restarting!");}));
+    softwareSensors.push_back(new DallasTemp(DTPIN, []() { Serial.println("Dallas temp exceeded failures, restarting!");}));
   #endif
 
-  NetSender::ExternalReader = &reader;
+  #ifdef ENABLE_TSL2591_SENSOR
+    softwareSensors.push_back(new TSL2951(SDA, SCL, []() { Serial.println("TSL2951 Photometer exceeded failures, restarting!");}));
+  #endif
+
+  #ifdef ENABLE_GPS_SENSOR
+    binarySensors.push_back(new GPS(RX, TX, []() { /* GPS Doesn't currently Count failures. */ }));
+  #endif
+
+  NetSender::ExternalReader = &softwareReader;
+  NetSender::PostReader = &binaryReader;
   NetSender::init();
   loop();
 }

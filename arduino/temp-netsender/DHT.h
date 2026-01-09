@@ -13,6 +13,7 @@ written by Adafruit Industries
 #endif
 
 #include "sensor.h"
+#include "NetSender.h"
 
 #include <optional>
 #include <functional>
@@ -50,7 +51,7 @@ class DHT : public Sensor {
    float readHumidity(bool force=false);
    boolean read(bool force=false);
 
-   std::optional<int> read(int softwarePin) override;
+   std::optional<NetSender::Pin> read(int softwarePin) override;
 
  private:
   int failures{0};

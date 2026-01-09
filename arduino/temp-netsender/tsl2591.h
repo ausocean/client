@@ -1,6 +1,6 @@
 /*
 LICENSE
-  Copyright (C) 2025 the Australian Ocean Lab (AusOcean).
+  Copyright (C) 2026 the Australian Ocean Lab (AusOcean).
 
   This is free software: you can redistribute it and/or modify it
   under the terms of the GNU General Public License as published by
@@ -17,51 +17,47 @@ LICENSE
   <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DALLAS_TEMP_H
-#define DALLAS_TEMP_H
+#pragma once
 
-#include <OneWire.h>
-#include <DallasTemperature.h>
+#include <Adafruit_TSL2591.h>
 #include <optional>
 #include <functional>
 
-#include "NetSender.h"
 #include "sensor.h"
 
 #define MAX_FAILURES 10
 
-#define ZERO_CELSIUS 273.15 // In Kelvin.
+static constexpr auto TSL_ID{70};
 
-class DallasTemp : public Sensor {
+class TSL2951 : public Sensor {
 public:
-    DallasTemp(int hardwarePin, std::function<void()> onFailure) : ow(hardwarePin), dt(&ow), onFailure(onFailure) {
-        dt.begin();
+    TSL2951(int sdaPin, int sclPin, std::function<void()> onFailure) : tsl(TSL_ID), onFailure(onFailure) {
+      Wire.begin(sdaPin, sclPin);
+      tsl.setGain(TSL2591_GAIN_LOW);
+      tsl.setTiming(TSL2591_INTEGRATIONTIME_100MS);
+      tsl.begin();
     }
 
     std::optional<NetSender::Pin> read(int softwarePin) override {
-        if (failures >= MAX_FAILURES) {
+      if (failures >= MAX_FAILURES) {
             onFailure();
-            dt.begin();
+            tsl.begin();
             failures = 0;
         }
 
         if (softwarePin == 60) {
-            dt.requestTemperatures();
-            auto ff = dt.getTempCByIndex(0);
-            if (isnan(ff) || ff <= -127) {
+          auto lum = tsl.getLuminosity(TSL2591_FULLSPECTRUM);
+              if ((lum <= 0) || isnan(lum)) {
                 failures++;
                 return std::nullopt;
-            } else {
-                return NetSender::Pin{.value = 10 * (ff + ZERO_CELSIUS)};
-            }
+              }
+              NetSender::Pin pin{.value = lum};
+              return pin;
         }
         return std::nullopt;
     }
 private:
     int failures{0};
-    DallasTemperature dt;
-    OneWire ow;
+    Adafruit_TSL2591 tsl;
     std::function<void()> onFailure;
 };
-
-#endif // DALLAS_TEMP_H
