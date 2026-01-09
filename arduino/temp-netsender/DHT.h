@@ -12,6 +12,11 @@ written by Adafruit Industries
  #include "WProgram.h"
 #endif
 
+#include "sensor.h"
+#include "NetSender.h"
+
+#include <optional>
+#include <functional>
 
 // Uncomment to enable printing out nice debug messages.
 //#define DHT_DEBUG
@@ -35,9 +40,9 @@ written by Adafruit Industries
 #define AM2301 21
 
 
-class DHT {
+class DHT : public Sensor {
   public:
-   DHT(uint8_t pin, uint8_t type, uint8_t count=6);
+   DHT(uint8_t pin, uint8_t type, std::function<void()> onFailure, uint8_t count=6);
    void begin(void);
    float readTemperature(bool S=false, bool force=false);
    float convertCtoF(float);
@@ -46,7 +51,10 @@ class DHT {
    float readHumidity(bool force=false);
    boolean read(bool force=false);
 
+   std::optional<NetSender::Pin> read(int softwarePin) override;
+
  private:
+  int failures{0};
   uint8_t data[5];
   uint8_t _pin, _type;
   #ifdef __AVR
@@ -59,6 +67,7 @@ class DHT {
 
   uint32_t expectPulse(bool level);
 
+  std::function<void()> onFailure;
 };
 
 class InterruptLock {
