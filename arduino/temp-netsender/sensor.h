@@ -20,15 +20,16 @@ LICENSE
 #ifndef SENSOR_H
 #define SENSOR_H
 
+#include "NetSender.h"
 #include <optional>
 
 class Sensor {
 public:
-    // read returns the value of the sensor at the given software pin.
-    // If the sensor is not connected to the given software pin, or there are issues
-    // it returns std::nullopt.
+    // read returns the value and data where applicable of the sensor at the
+    // given software pin. If the sensor is not connected to the given
+    // software pin, or there are issues it returns std::nullopt.
     // A sensor can handle multiple software pin values (if there are sub-sensors).
-    virtual std::optional<int> read(int softwarePin) = 0;
+    virtual std::optional<NetSender::Pin> read(int softwarePin) = 0;
 };
 
 #endif // SENSOR_H

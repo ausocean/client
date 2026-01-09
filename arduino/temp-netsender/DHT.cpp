@@ -267,7 +267,7 @@ uint32_t DHT::expectPulse(bool level) {
   return count;
 }
 
-std::optional<int> DHT::read(int softwarePin) {
+std::optional<NetSender::Pin> DHT::read(int softwarePin) {
   if(failures >= MAX_FAILURES) {
     onFailure();
     begin();
@@ -282,7 +282,7 @@ std::optional<int> DHT::read(int softwarePin) {
       failures++;
       return std::nullopt;
     } else {
-      return 10 * (ff + ZERO_CELSIUS);
+      return NetSender::Pin{.value = 10 * (ff + ZERO_CELSIUS)};
     }
     break;
   case 51: // DHT humidity
@@ -291,7 +291,7 @@ std::optional<int> DHT::read(int softwarePin) {
       failures++;
       return std::nullopt;
     } else {
-      return 10 * ff;
+      return NetSender::Pin{.value = 10 * ff};
     }
     break;
   }
