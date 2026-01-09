@@ -6,9 +6,16 @@ written by Adafruit Industries
 
 #include "DHT.h"
 
+#include <optional>
+
+#include "NetSender.h"
+
 #define MIN_INTERVAL 2000
 
-DHT::DHT(uint8_t pin, uint8_t type, uint8_t count) {
+#define ZERO_CELSIUS 273.15 // In Kelvin.
+#define MAX_FAILURES 10
+
+DHT::DHT(uint8_t pin, uint8_t type, std::function<void()> onFailure, uint8_t count) : onFailure(onFailure) {
   _pin = pin;
   _type = type;
   #ifdef __AVR
@@ -19,6 +26,8 @@ DHT::DHT(uint8_t pin, uint8_t type, uint8_t count) {
                                                  // reading pulses from DHT sensor.
   // Note that count is now ignored as the DHT reading algorithm adjusts itself
   // basd on the speed of the processor.
+
+  this->begin();
 }
 
 void DHT::begin(void) {
@@ -256,4 +265,35 @@ uint32_t DHT::expectPulse(bool level) {
   #endif
 
   return count;
+}
+
+std::optional<NetSender::Pin> DHT::read(int softwarePin) {
+  if(failures >= MAX_FAILURES) {
+    onFailure();
+    begin();
+    failures = 0;
+  }
+
+  float ff;
+  switch(softwarePin){
+  case 50: // DHT air temperature
+    ff = readTemperature();
+    if (isnan(ff)) {
+      failures++;
+      return std::nullopt;
+    } else {
+      return NetSender::Pin{.value = 10 * (ff + ZERO_CELSIUS)};
+    }
+    break;
+  case 51: // DHT humidity
+    ff = readHumidity();
+    if (isnan(ff)) {
+      failures++;
+      return std::nullopt;
+    } else {
+      return NetSender::Pin{.value = 10 * ff};
+    }
+    break;
+  }
+  return std::nullopt;
 }
