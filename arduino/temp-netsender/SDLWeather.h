@@ -17,42 +17,47 @@
 #define SDL_MODE_DELAY 1
 
 #include "Arduino.h"
+#include "sensor.h"
+#include <optional>
 
 extern "C" void serviceInterruptAnem(void)  __attribute__ ((signal));
 extern "C" void serviceInterruptRain(void)  __attribute__ ((signal));
-class SDLWeather
+class SDLWeather : public Sensor
 {
   public:
   SDLWeather(int pinAnem, int pinRain, int ADChannel);
-  
+
   float getCurrentRainTotal();
   float getWindSpeed();
   float getWindDirection();
   float getWindGust();
   void setWindMode(int selectedMode, float samplePeriod);
-  
+
   static unsigned long _shortestWindTime;
   static long _currentRainCount;
   static long _currentWindCount;
-    
+
   friend void serviceInterruptAnem();
-  friend void serviceInterruptRain(); 
-  
+  friend void serviceInterruptRain();
+
   private:
   int _pinAnem;
-  int _pinRain;    
+  int _pinRain;
   int _ADChannel;
   float _samplePeriod;
   int _selectedMode;
-    
+
   unsigned long _startSampleTime;
 
   float _currentWindSpeed;
   float _currentWindDirection;
-    
+
+  float _rainTotal{0.0};
+
   void startWindSample(float sampleTime);
   float getCurrentWindSpeedWhenSampling();
+
+  std::optional<NetSender::Pin> read(int softwarePin) override;
 };
 
 #endif
-

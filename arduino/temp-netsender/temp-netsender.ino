@@ -42,6 +42,7 @@ LICENSE
 #define ENABLE_DALLAS_TEMP_SENSOR
 #define ENABLE_TSL2591_SENSOR
 #define ENABLE_GPS_SENSOR
+#define ENABLE_SDL_WEATHER_SENSOR
 
 
 // If DHT enabled, define type and hardware pins depending on ESP8266 or ESP32
@@ -84,6 +85,16 @@ LICENSE
   #else
     #define RXPIN        34
     #define TXPIN        -1
+  #endif
+#endif
+
+// If SDL Weather enabled, define hardware pins and channel
+#ifdef ENABLE_SDL_WEATHER_SENSOR
+  #ifdef ESP8266
+    #include "SDLWeather.h"
+    #define SDL_PIN_ANEM  4
+    #define SDL_PIN_RAIN  5
+    #define SDL_AD_CHAN   A0
   #endif
 #endif
 
@@ -149,6 +160,10 @@ void setup() {
 
   #ifdef ENABLE_TSL2591_SENSOR
     softwareSensors.push_back(new TSL2951(SDA, SCL, []() { Serial.println("TSL2951 Photometer exceeded failures, restarting!");}));
+  #endif
+
+  #ifdef ENABLE_SDL_WEATHER_SENSOR
+    softwareSensors.push_back(new SDLWeather(SDL_PIN_ANEM, SDL_PIN_RAIN, SDL_AD_CHAN));
   #endif
 
   #ifdef ENABLE_GPS_SENSOR
