@@ -90,10 +90,12 @@ LICENSE
 
 // If SDL Weather enabled, define hardware pins and channel
 #ifdef ENABLE_SDL_WEATHER_SENSOR
-  #include "SDLWeather.h"
-  #define SDL_PIN_ANEM  4
-  #define SDL_PIN_RAIN  5
-  #define SDL_AD_CHAN   A0
+  #ifdef ESP8266
+    #include "SDLWeather.h"
+    #define SDL_PIN_ANEM  4
+    #define SDL_PIN_RAIN  5
+    #define SDL_AD_CHAN   A0
+  #endif
 #endif
 
 
