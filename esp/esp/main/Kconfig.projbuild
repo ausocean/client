@@ -1,0 +1,63 @@
+menu "SD Card"
+
+    config SD_MISO
+        int "SPI MISO Pin number"
+        range 1 255
+        default 12
+        help
+            Set the GPIO pin used as Master In for the SD card.
+
+
+    config SD_MOSI
+        int "SPI MOSI Pin number"
+        range 1 255
+        default 13
+        help
+            Set the GPIO pin used as Master Out for the SD card.
+
+
+    config SD_CLK
+        int "SPI CLK Pin number"
+        range 1 255
+        default 14
+        help
+            Set the GPIO pin used as Clock for the SD card.
+
+
+    config SD_CS
+        int "SPI CS Pin number"
+        range 1 255
+        default 15
+        help
+            Set the GPIO pin used as Chip Select for the SD card.
+
+
+    config SD_DET
+        int "SD detect Pin number"
+        range 1 255
+        default 5
+        help
+            Set the GPIO pin used as SD detect for the SD card.
+
+    config SD_QUADWP
+        int "Write Protect Pin number"
+        range -1 255
+        default -1
+        help
+            GPIO pin for WP (Write Protect) signal, or -1 if not used.
+
+    config SD_QUADHD
+        int "Hold Signal Pin number"
+        range -1 255
+        default -1
+        help
+            GPIO pin for HD (Hold) signal, or -1 if not used.
+
+    config SD_MAX_TRANSFER_SZ
+        int "Max Transfer Size"
+        range 1 32000
+        default 4000
+        help
+            Maximum transfer size, in bytes. Defaults to 4092 if 0 when DMA enabled, or to SOC_SPI_MAXIMUM_BUFFER_SIZE if DMA is disabled.
+
+endmenu
