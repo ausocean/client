@@ -61,3 +61,42 @@ menu "SD Card"
             Maximum transfer size, in bytes. Defaults to 4092 if 0 when DMA enabled, or to SOC_SPI_MAXIMUM_BUFFER_SIZE if DMA is disabled.
 
 endmenu
+menu "Amplifier"
+
+    config AMP_I2C_ADDRESS
+    int "AMP I2C Address"
+    range 0 127
+    # The default amp address is 0x2D (45)
+    default 45 
+    help
+        I2C address of the attached Amplifier.
+
+    config AMP_I2C_PORT
+    int "I2C Port Number"
+    range 0 1
+    default 0
+    help
+        Port number to communicate with the Amplifier I2C interface.
+
+    config AMP_I2C_CLOCK_SPEED
+    int "I2C Clock Speed (Hz)"
+    range 1000 250000
+    default 0
+    help
+        Clock speed used by the I2C bus to communicate with the amplifier.
+
+    config AMP_I2C_SDA
+    int "I2C SDA GPIO pin number"
+    range 1 255
+    default 16
+    help
+        SDA Pin GPIO number.
+
+    config AMP_I2C_SCL
+    int "I2C SCL GPIO pin number"
+    range 1 255
+    default 18
+    help
+        SCL Pin GPIO number.
+
+endmenu
