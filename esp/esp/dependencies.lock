@@ -116,9 +116,19 @@ dependencies:
     source:
       type: idf
     version: 5.5.2
+  tas5805:
+    dependencies:
+    - name: idf
+      version: '>=4.1.0'
+    source:
+      path: 
+        /home/david/go/src/github.com/ausocean/client/esp/esp/components/tas5805
+      type: local
+    version: '*'
 direct_dependencies:
 - espressif/ethernet_init
 - idf
-manifest_hash: c94e2e03b8cbd655919d543f2e153cbcc122959fd312bd34c181f5c944a9cc67
+- tas5805
+manifest_hash: b63a8885b3de68524c6df3bcf6b0405e1ecba3d334c3fa820bd43c6ab37f4723
 target: esp32
 version: 2.0.0

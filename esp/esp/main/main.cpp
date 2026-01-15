@@ -1,3 +1,8 @@
+// Make the app c++ compatible.
+extern "C" {
+    void app_main();
+}
+
 #include <stdio.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
@@ -12,12 +17,18 @@
 #include "sdmmc_cmd.h"
 #include "driver/sdspi_host.h"
 #include "esp_vfs_fat.h"
+#include "driver/i2c_master.h"
+#include "tas5805.hpp"
 
 #define SPEAKER_VERSION "0.0.1"
 
 // Mount point for the SD card filesystem.
-#define MOUNT_POINT "/sdcard"
+static const char* mount_point = "/sdcard";
 
+// Filepath for the audio file.
+static const char* audio_file = "audio.wav";
+
+// Tag used in logs.
 static const char* TAG = "speaker";
 
 /** Event handler for Ethernet events */
@@ -93,56 +104,68 @@ static void init_ethernet() {
     esp_eth_start(eth_handle); // start Ethernet driver state machine
 }
 
-static void init_sd() {
+static sdmmc_card_t *init_sd() {
     // Use the default host.
     sdmmc_host_t host = SDSPI_HOST_DEFAULT();
 
     // Configure the SPI bus to use the config values.
-    spi_bus_config_t bus_cfg = {
-        .mosi_io_num = CONFIG_SD_MOSI,
-        .miso_io_num = CONFIG_SD_MISO,
-        .sclk_io_num = CONFIG_SD_CLK,
-        .quadwp_io_num = CONFIG_SD_QUADWP,
-        .quadhd_io_num = CONFIG_SD_QUADHD,
-        .max_transfer_sz = CONFIG_SD_MAX_TRANSFER_SZ,
-    };
+    spi_bus_config_t bus_cfg = {};
+    bus_cfg.mosi_io_num = (gpio_num_t)CONFIG_SD_MOSI;
+    bus_cfg.miso_io_num = (gpio_num_t)CONFIG_SD_MISO;
+    bus_cfg.sclk_io_num = (gpio_num_t)CONFIG_SD_CLK;
+    bus_cfg.quadwp_io_num = CONFIG_SD_QUADWP;
+    bus_cfg.quadhd_io_num = CONFIG_SD_QUADHD;
+    bus_cfg.max_transfer_sz = CONFIG_SD_MAX_TRANSFER_SZ;
 
     // Initialise the SPI Bus.
-    ESP_ERROR_CHECK(spi_bus_initialize(host.slot, &bus_cfg, SDSPI_DEFAULT_DMA));
+    ESP_ERROR_CHECK(spi_bus_initialize((spi_host_device_t)host.slot, &bus_cfg, SDSPI_DEFAULT_DMA));
 
     // Configure the SD Slot.
     sdspi_dev_handle_t sd_handle;
     sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
-    slot_config.gpio_cs = CONFIG_SD_CS;
-    slot_config.gpio_cd = CONFIG_SD_DET;
-    slot_config.host_id = host.slot;
+    slot_config.gpio_cs = static_cast<gpio_num_t>(CONFIG_SD_CS);
+    slot_config.gpio_cd = static_cast<gpio_num_t>(CONFIG_SD_DET);
+    slot_config.host_id = static_cast<spi_host_device_t>(host.slot);
 
-    // Initialise the 
+    // Initialise the device.
     ESP_ERROR_CHECK(sdspi_host_init_device(&slot_config, &sd_handle));
 
     ESP_LOGI(TAG, "Mounting filesystem");
-    
 
+    // Create a card.
     sdmmc_card_t *card;
-    const char mount_point[] = MOUNT_POINT;
 
     // Options for mounting the filesystem.
-    esp_vfs_fat_sdmmc_mount_config_t mount_config = {
-        .format_if_mount_failed = false,
-        .max_files = 5,
-        .allocation_unit_size = 16 * 1024
-    };
+    esp_vfs_fat_sdmmc_mount_config_t mount_config = {};
+    mount_config.format_if_mount_failed = false;
+    mount_config.max_files = 5;
+    mount_config.allocation_unit_size = 16 * 102;
 
+    // Mount the filesystem.
     ESP_ERROR_CHECK(esp_vfs_fat_sdspi_mount(mount_point, &host, &slot_config, &mount_config, &card));
-
     ESP_LOGI(TAG, "Filesystem mounted");
 
-    // Card has been initialized, print its properties
-    sdmmc_card_print_info(stdout, card);
+    return card;
+}
+
+void init_amp() {
+    i2c_master_bus_config_t i2c_config = {};
+    i2c_config.sda_io_num = static_cast<gpio_num_t>(CONFIG_AMP_I2C_SDA);
+    i2c_config.scl_io_num = static_cast<gpio_num_t>(CONFIG_AMP_I2C_SCL);
+    i2c_config.clk_source = I2C_CLK_SRC_DEFAULT;
+    i2c_config.glitch_ignore_cnt = 7;
+    i2c_config.flags.enable_internal_pullup = true;
+    i2c_master_bus_handle_t bus_handle;
+    ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_config, &bus_handle));
+    ESP_LOGI(TAG, "I2C Master bus created");
+
+    TAS5805 amp(bus_handle);
 }
 
 void app_main(void)
 {
+    sdmmc_card_t* sd_card;
+
     ESP_LOGI(TAG, "Speaker Netsender Version: %s", SPEAKER_VERSION);
 
     ESP_LOGI(TAG, "Initialising ethernet");
@@ -150,5 +173,10 @@ void app_main(void)
     ESP_LOGI(TAG, "Ethernet initialised");
 
     ESP_LOGI(TAG, "Initialising SD card");
-    init_sd();
+    sd_card = init_sd();
+    ESP_LOGI(TAG, "SD initialised");
+
+    ESP_LOGI(TAG, "Initialising I2S Amp");
+    init_amp();
+    ESP_LOGI(TAG, "Amp Initialised");
 }
