@@ -25,6 +25,8 @@
 */
 
 #include "driver/i2c_master.h"
+#include "driver/i2s_std.h"
+#include <stdio.h>
 
 constexpr auto TAS8505_CHANGE_PAGE_REG   = 0x00;
 constexpr auto TAS8505_CHANGE_BOOK_REG   = 0x7F;
@@ -42,10 +44,24 @@ public:
      * @brief Create a new TAS5805
      *
      * @param bus_handle i2c bus handler to connect the amplifier to.
+     * @param tx_handle i2s transmit pipe handler to play audio.
      */
-    TAS5805(i2c_master_bus_handle_t handle);
+    TAS5805(i2c_master_bus_handle_t handle, i2s_chan_handle_t* tx_handle);
 
+    /**
+     * @brief Reads PCM data from a file and writes it to the I2S DMA buffer.
+     * @param f Pointer to the opened audio file
+     */
+    void play(const char* path);
 
+    void play_beep(uint32_t duration_ms);
+
+    void test_performance_gap();
+
+    /**
+     * @brief destructor.
+     */
+    ~TAS5805();
 
 private:
     /**
@@ -55,9 +71,14 @@ private:
      * @param data data to be written to the register.
      * @param len length of the data to write.
      */
-    void write_reg(const int reg, const uint8_t* data, const int len);
+    void write_reg(const int reg, const uint8_t* data);
+
+    void internal_play_loop(FILE* f);
 
     /** I2C master handles */
     i2c_master_bus_handle_t bus_handle;
     i2c_master_dev_handle_t dev_handle;
+
+    /** I2S handles */
+    i2s_chan_handle_t* tx_handle;
 };
