@@ -54,10 +54,6 @@ public:
      */
     void play(const char* path);
 
-    void play_beep(uint32_t duration_ms);
-
-    void test_performance_gap();
-
     /**
      * @brief destructor.
      */
@@ -72,8 +68,6 @@ private:
      * @param len length of the data to write.
      */
     void write_reg(const int reg, const uint8_t* data);
-
-    void internal_play_loop(FILE* f);
 
     /** I2C master handles */
     i2c_master_bus_handle_t bus_handle;
