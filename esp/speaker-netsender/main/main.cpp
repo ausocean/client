@@ -24,12 +24,15 @@
     <http://www.gnu.org/licenses/>.
 */
 
-#include "esp_err.h"
+// Make the app c++ compatible.
 extern "C" {
     void app_main();
 }
 
-// Make the app c++ compatible.
+#include "driver/i2s_types.h"
+#include "esp_err.h"
+#include "netsender.hpp"
+#include "soc/clk_tree_defs.h"
 #include "driver/i2s_types.h"
 #include "soc/clk_tree_defs.h"
 #include <stdio.h>
@@ -276,4 +279,8 @@ void app_main(void)
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "failed to play audio");
     }
+    // amp->play(file_path);
+    Netsender ns;
+
+    ns.print_config();
 }

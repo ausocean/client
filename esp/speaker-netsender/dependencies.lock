@@ -115,18 +115,25 @@ dependencies:
     source:
       type: idf
     version: 5.5.2
+  netsender:
+    dependencies: []
+    source:
+      path: /home/david/go/src/github.com/ausocean/client/esp/speaker-netsender/components/netsender
+      type: local
+    version: '*'
   tas5805:
     dependencies:
     - name: idf
       version: '>=4.1.0'
     source:
-      path: /home/david/go/src/github.com/ausocean/client/esp/esp/components/tas5805
+      path: /home/david/go/src/github.com/ausocean/client/esp/speaker-netsender/components/tas5805
       type: local
     version: '*'
 direct_dependencies:
 - espressif/ethernet_init
 - idf
+- netsender
 - tas5805
-manifest_hash: b63a8885b3de68524c6df3bcf6b0405e1ecba3d334c3fa820bd43c6ab37f4723
+manifest_hash: f4759599976a8765010d0e138336800bca1138803c4a94781dcafd520320940a
 target: esp32
 version: 2.0.0
