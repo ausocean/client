@@ -16,13 +16,11 @@ extern "C" {
 #include "esp_event.h"
 #include <sdkconfig.h>
 #include "esp_log.h"
-#include "sdmmc_cmd.h"
 #include "driver/sdspi_host.h"
 #include "esp_vfs_fat.h"
 #include "driver/i2c_master.h"
 #include "driver/i2s_std.h"
 #include "tas5805.hpp"
-#include <errno.h>
 #include <sys/unistd.h>
 #include <sys/stat.h>
 #include "esp_vfs_fat.h"
@@ -31,9 +29,6 @@ extern "C" {
 
 // Mount point for the SD card filesystem.
 static const char* mount_point = "/sdcard";
-
-
-#define MOUNT_POINT "/sdcard"
 
 // Filepath for the audio file.
 static const char* audio_file = "audio.wav";
@@ -86,7 +81,8 @@ static void got_ip_event_handler(void *arg, esp_event_base_t event_base,
 }
 
 /** Initialisation of the ethernet MAC, PHY, and IP/TCP */
-static void init_ethernet() {
+static void init_ethernet()
+{
     eth_mac_config_t mac_config = ETH_MAC_DEFAULT_CONFIG();                      // apply default common MAC configuration
     eth_esp32_emac_config_t esp32_emac_config = ETH_ESP32_EMAC_DEFAULT_CONFIG(); // apply default vendor-specific MAC configuration
     esp32_emac_config.smi_gpio.mdc_num = CONFIG_ETHERNET_MDC_GPIO;            // alter the GPIO used for MDC signal
@@ -114,11 +110,10 @@ static void init_ethernet() {
     esp_eth_start(eth_handle); // start Ethernet driver state machine
 }
 
-static void *init_sd(sdmmc_card_t **card) {
+static void *init_sd(sdmmc_card_t **card)
+{
     // Use the default host.
     sdmmc_host_t host = SDSPI_HOST_DEFAULT();
-    host.max_freq_khz = 20000;
-    host.flags = SDMMC_HOST_FLAG_SPI | SDMMC_HOST_FLAG_DEINIT_ARG;
 
     // Configure the SPI bus to use the config values.
     spi_bus_config_t bus_cfg = {};
@@ -127,7 +122,7 @@ static void *init_sd(sdmmc_card_t **card) {
     bus_cfg.sclk_io_num = (gpio_num_t)CONFIG_SD_CLK;
     bus_cfg.quadwp_io_num = CONFIG_SD_QUADWP;
     bus_cfg.quadhd_io_num = CONFIG_SD_QUADHD;
-    bus_cfg.max_transfer_sz = 16384;
+    bus_cfg.max_transfer_sz = CONFIG_SD_MAX_TRANSFER_SZ;
 
     // Initialise the SPI Bus.
     ESP_ERROR_CHECK(spi_bus_initialize((spi_host_device_t)host.slot, &bus_cfg, SDSPI_DEFAULT_DMA));
@@ -138,8 +133,6 @@ static void *init_sd(sdmmc_card_t **card) {
     slot_config.gpio_cs = static_cast<gpio_num_t>(CONFIG_SD_CS);
     slot_config.gpio_cd = static_cast<gpio_num_t>(CONFIG_SD_DET);
     slot_config.host_id = static_cast<spi_host_device_t>(host.slot);
-
-    gpio_pullup_en(static_cast<gpio_num_t>(CONFIG_SD_MISO));
 
     // Initialise the device.
     ESP_ERROR_CHECK(sdspi_host_init_device(&slot_config, &sd_handle));
@@ -159,7 +152,8 @@ static void *init_sd(sdmmc_card_t **card) {
     return card;
 }
 
-static void init_amp(TAS5805** amp) {
+static void init_amp(TAS5805** amp)
+{
     // Configure and setup I2C.
     i2c_master_bus_config_t i2c_config = {};
     i2c_config.sda_io_num = static_cast<gpio_num_t>(CONFIG_AMP_I2C_SDA);
@@ -179,31 +173,31 @@ static void init_amp(TAS5805** amp) {
     ESP_ERROR_CHECK(i2s_new_channel(&chan_cfg, tx_handle, NULL));
 
     i2s_std_config_t std_cfg = {
-    .clk_cfg = {
-        .sample_rate_hz = CONFIG_AMP_I2S_SAMPLE_RATE,
-        .clk_src = I2S_CLK_SRC_APLL,
-        .mclk_multiple = I2S_MCLK_MULTIPLE_256,
-        .bclk_div = 8,
-    },
-    .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO),
-    .gpio_cfg = {                                                                                                       
-        .mclk = I2S_GPIO_UNUSED,
-        .bclk = static_cast<gpio_num_t>(CONFIG_AMP_I2S_BCLK),
-        .ws   = static_cast<gpio_num_t>(CONFIG_AMP_I2S_WS),
-        .dout = static_cast<gpio_num_t>(CONFIG_AMP_I2S_DOUT),
-        .din  = I2S_GPIO_UNUSED,                                                                                       
-        .invert_flags =                                                                                                   
-            {                                                                                                               
-            .mclk_inv = false,                                                                                        
-            .bclk_inv = false,                                                                                        
-            .ws_inv = false,                                                                                            
-            },                                                                                                              
+        .clk_cfg = {
+            .sample_rate_hz = CONFIG_AMP_I2S_SAMPLE_RATE,
+            .clk_src = I2S_CLK_SRC_APLL,
+            .mclk_multiple = I2S_MCLK_MULTIPLE_256,
+            .bclk_div = 8,
+        },
+        .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO),
+        .gpio_cfg = {
+            .mclk = I2S_GPIO_UNUSED,
+            .bclk = static_cast<gpio_num_t>(CONFIG_AMP_I2S_BCLK),
+            .ws   = static_cast<gpio_num_t>(CONFIG_AMP_I2S_WS),
+            .dout = static_cast<gpio_num_t>(CONFIG_AMP_I2S_DOUT),
+            .din  = I2S_GPIO_UNUSED,
+            .invert_flags =
+            {
+                .mclk_inv = false,
+                .bclk_inv = false,
+                .ws_inv = false,
+            },
         },
     };
 
     // Initialise channel.
     ESP_ERROR_CHECK(i2s_channel_init_std_mode(*tx_handle, &std_cfg));
-    
+
     // Enable the channel.
     // NOTE: This MUST be done before initialising amp, as the amp requires a
     // stable clock before configuration.
@@ -212,74 +206,6 @@ static void init_amp(TAS5805** amp) {
 
     // Create a new amplifier.
     *amp = new TAS5805(bus_handle, tx_handle);
-}
-
-#define BASESTR1000 "ilyaMGxdTWjsYqlJcV1NboIeL2uJEkKeHSCnOAcxy3vrjdO2SdohjgooJm4ra9dciOyRsWbXyWSFfoR4let1UK257AocMOVMe54UyFvAzhRIzoCuL7X7giJu1g7LWVmmadVy67HescGBf6ztqbAZekLsgKd6PXxzlBauC0IaHIawIAqQ3w40h22Rcz3ADqup9JhoNz9A0M00JQuH6KThl4bHLmjGzmu726HSB2KG01Ocl8yNLZEsY72wmNORycqPC3xgED9oYtvA1qGWj4nj7Rq0LpOmNv4czvWmyvJg6xwXArBJ8hjO6SWRjk2AACvYclxofhCHUHqyONzANQo46sjztswMfoyqBaOBOIC9r9BX07I8eYzbrjGWNCxYilOiiOEudCK5inAuvusVqPYZ6mGmXYBmOzWIUa59MrhIVtZYk0GYMMZgOgULWwsNxI1H24aYLyUnFn7vEe2tqYhHTpCU2jE2Bf60sMrzAMzLDBBsot623FjMsg067Y7pnlaEJdMlt8KldcZW99fc55C10p9BZzGmgLNtSfQuMa3LEar4w2yjllj6HYKgPs0WlxBcaFHwTsqfMpvyAW4gs9b8R6QiWUf4DtWVEoD8vDJvw2U189J3Bu5lQMitI5eeEh8GPKsqZEEyccL7aFUh4GvouccE4gpeO2oeL10a8csnR0RxVnT0t7ktb7RBCFz03t7rhuqlztrTIIuFmNgwRf5qrdMEI5skTryvNcfVofnEWmMJL2nHsZdZOUniRrThjolu9qyM96jw1OspSZU5avJjRGQmTFGNEcF7dmrvYcfvt5oWZVIvLn3ROLiKZtyutGgQWGLnXNbqFvNosZVENY1hqYArKimBbGoBAzSydkek8uvBpZNj2yq5FJgsR5VbHkAaa67SMDax6rD9ZLx7JntDWVbexwGNILPesyAxETs2kCiNZqTYo3mOE9oBjPpkCHJrM8tO85hCbKAY3N59lYIVHlDHIy6EimMYrzuKv85v"
-
-void run_sd_performance_test(sdmmc_card_t *sd_card) {
-    // --- 1. Basic File Operations (Hello World) ---
-    const char *file_hello = MOUNT_POINT"/hello.txt";
-    const char *file_foo = MOUNT_POINT"/foo.txt";
-
-    FILE *f = fopen(file_hello, "w");
-    if (f) {
-        fprintf(f, "Hello %s!\n", sd_card->cid.name);
-        fclose(f);
-    }
-
-    struct stat st;
-    if (stat(file_foo, &st) == 0) unlink(file_foo);
-    rename(file_hello, file_foo);
-
-    // --- 2. High Speed Write Test ---
-    const char *file_test = MOUNT_POINT"/test.txt";
-    const size_t fs_buffer_size = 32 * 1024; // 32KB Staging Buffer
-    const size_t str_len = strlen(BASESTR1000);
-    const int loopcount = 1000;
-
-    // Allocate DMA-capable memory for the filesystem buffer
-    char* fs_buffer = (char*)heap_caps_malloc(fs_buffer_size, MALLOC_CAP_DMA);
-    if (!fs_buffer) {
-        ESP_LOGE(TAG, "Failed to allocate FS buffer");
-        return;
-    }
-
-    FILE *test = fopen(file_test, "w");
-    if (test == NULL) {
-        ESP_LOGE(TAG, "Failed to open test file");
-        free(fs_buffer);
-        return;
-    }
-
-    // Apply the setvbuf trick to bypass VFS overhead
-    setvbuf(test, fs_buffer, _IOFBF, fs_buffer_size);
-
-    ESP_LOGI(TAG, "Starting write test (1MB total)...");
-    TickType_t startTick = xTaskGetTickCount();
-
-    for (int i = 0; i < loopcount; i++) {
-        if (fwrite(BASESTR1000, str_len, 1, test) != 1) {
-            ESP_LOGE(TAG, "Write failed at loop %d", i);
-            break;
-        }
-    }
-
-    // Force flush the buffer to the card BEFORE stopping the timer
-    fflush(test);
-    TickType_t endTick = xTaskGetTickCount();
-    fclose(test);
-
-    // --- 3. Results and Cleanup ---
-    uint32_t time_ms = pdTICKS_TO_MS(endTick - startTick);
-    double total_kb = (double)(loopcount * str_len) / 1024.0;
-    double speed_kbps = (total_kb * 1000.0) / time_ms;
-
-    ESP_LOGI(TAG, "Test Complete: %.2f kB in %u ms (%.2f kB/s)", total_kb, time_ms, speed_kbps);
-
-    free(fs_buffer);
-
-    esp_vfs_fat_sdcard_unmount(MOUNT_POINT, sd_card);
-    ESP_LOGI(TAG, "Card unmounted.");
 }
 
 void app_main(void)
@@ -304,11 +230,7 @@ void app_main(void)
     // Construct the full path: /sdcard/audio.wav
     char file_path[64];
     snprintf(file_path, sizeof(file_path), "%s/%s", mount_point, audio_file);
+
+    // Play audio.
     amp->play(file_path);
-
-    // amp->test_performance_gap();
-    
-    // amp->play_beep(20000);
-
-    // run_sd_performance_test(sd_card);
 }
