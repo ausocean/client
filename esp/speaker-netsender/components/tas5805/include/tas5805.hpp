@@ -1,6 +1,6 @@
 /*
   Name:
-    tas5805.h - An ESP-IDF component to support the TAS5805 Amplifier module.
+    tas5805.hpp - An ESP-IDF component to support the TAS5805 Amplifier module.
 
   Authors:
     David Sutton <davidsutton@ausocean.org>

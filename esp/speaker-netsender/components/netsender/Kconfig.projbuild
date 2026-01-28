@@ -1,0 +1,26 @@
+menu "Netsender"
+
+    config NETSENDER_MAX_PINS
+        int "Maximum supported pins"
+        range 1 255
+        default 20
+        help
+            The number of pins supported by the hardware and firmware.
+
+    config NETSENDER_DKEY_SIZE
+        int "Device Key length"
+        range 10 32
+        default 32
+        help
+            The number of digits in the device key.
+
+    config NETSENDER_RESERVED_SIZE
+        int "Reserved bytes in Config"
+        range 0 255
+        default 104
+        help
+            The number of reserved bytes in the config struct. This should
+            be kept at a value that makes the total config size be a multiple
+            of 128 bytes.
+
+endmenu
