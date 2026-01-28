@@ -116,33 +116,25 @@ void TAS5805::play(const char *path)
         setvbuf(f, fs_buf, _IOFBF, fs_buf_size);
     }
 
-    internal_play_loop(f);
-
-    fclose(f);
-    if (fs_buf) {
-        free(fs_buf);
-    }
-
-}
-
-void TAS5805::internal_play_loop(FILE *f)
-{
-
+    // Read WAV header.
     wav_header_t header;
     if (fread(&header, sizeof(wav_header_t), 1, f) != 1) {
         return;
     }
 
-    // Use 4096 samples (16KB total for stereo 16-bit) as our working chunk
+    // Use 4096 samples as our working chunk.
     const size_t samples_per_read = 4096;
     size_t frame_size = sizeof(int16_t) * header.num_channels;
 
-    // Use internal RAM for file_buf instead of SPIRAM to ensure max speed
+    // Buffer for reading from file.
     int16_t *file_buf = (int16_t *)heap_caps_malloc(samples_per_read * frame_size,
                                                     MALLOC_CAP_8BIT);
+    // Buffer for writing to I2S.
+    // NOTE: The I2S buffer will always be stereo, regardless of the file type.
     int16_t *i2s_buf = (int16_t *)heap_caps_malloc(
                            samples_per_read * 2 * sizeof(int16_t), MALLOC_CAP_DMA);
 
+    // Verify that buffers got allocated successfully.
     if (!file_buf || !i2s_buf) {
         if (file_buf) {
             free(file_buf);
@@ -156,142 +148,47 @@ void TAS5805::internal_play_loop(FILE *f)
     size_t samples_read;
     size_t bytes_written;
 
-    while ((samples_read = fread(file_buf, frame_size, samples_per_read, f)) >
-            0) {
-        // MONO -> STEREO Conversion
+    while (
+        (samples_read = fread(file_buf, frame_size, samples_per_read, f)) > 0
+    ) {
         if (header.num_channels == 1) {
+            // We need to fill every second sample (right-channel), with a
+            // copy of the left channel audio, since the original file is mono,
+            // and the output must be stereo.
             for (size_t i = 0; i < samples_read; i++) {
                 int16_t sample = file_buf[i];
                 i2s_buf[i * 2] = sample;
                 i2s_buf[i * 2 + 1] = sample;
             }
-        }
-        // STEREO -> STEREO
-        else {
+        } else {
+            // Just copy the file buffer directly to the I2S buffer.
             memcpy(i2s_buf, file_buf, samples_read * 2 * sizeof(int16_t));
         }
 
-        // Blocking call: This handles the Watchdog feeding automatically
+        // Write audio to the amplifier.
         i2s_channel_write(*tx_handle, i2s_buf, samples_read * 2 * sizeof(int16_t),
                           &bytes_written, portMAX_DELAY);
     }
 
-    // Push final silence to clear the amp's pipeline
+    // Push final silence to clear the amp's pipeline.
     memset(i2s_buf, 0, 512 * 4);
     i2s_channel_write(*tx_handle, i2s_buf, 512 * 4, &bytes_written,
                       pdMS_TO_TICKS(100));
 
     free(file_buf);
     free(i2s_buf);
+
+    fclose(f);
+    if (fs_buf) {
+        free(fs_buf);
+    }
+
 }
 
-/**
- * @param sample_index The current sample number (increments forever)
- * @param target_freq  The frequency you want to hear (e.g., 440.0 for A4)
- * @param sample_rate  Your I2S sample rate (e.g., 44100)
- * @param amplitude    How loud (0 to 32767). 10000-20000 is usually safe.
- */
-int16_t calculate_sine(size_t sample_index, float target_freq, int sample_rate,
-                       int16_t amplitude)
-{
-    // Standard formula: y = A * sin(2 * PI * f * t)
-    // where t = sample_index / sample_rate
-    float time = (float)sample_index / (float)sample_rate;
-    float angle = 2.0f * (float)M_PI * target_freq * time;
-
-    return (int16_t)(amplitude * sinf(angle));
-}
-void TAS5805::play_beep(uint32_t duration_ms)
-{
-    const int sample_rate = CONFIG_AMP_I2S_SAMPLE_RATE;
-    const float frequency = 440.0f;
-    const int16_t amplitude = 300;
-
-    const size_t samples_per_cycle = sample_rate / frequency;
-    int16_t *lut = (int16_t *)malloc(samples_per_cycle * sizeof(int16_t));
-    if (!lut) {
-        return;
-    }
-
-    for (size_t i = 0; i < samples_per_cycle; i++) {
-        float angle = (2.0f * M_PI * i) / samples_per_cycle;
-        lut[i] = (int16_t)(sinf(angle) * amplitude);
-    }
-
-    const size_t chunk_samples = 512;
-    const size_t buffer_size = chunk_samples * 2 * sizeof(int16_t);
-    int16_t *dma_buffer =
-        (int16_t *)heap_caps_malloc(buffer_size, MALLOC_CAP_DMA);
-
-    if (dma_buffer) {
-        size_t total_samples_to_play = (sample_rate * duration_ms) / 1000;
-        size_t samples_played = 0;
-        size_t lut_index = 0;
-        size_t bytes_written; // Moved scope outside the loops
-
-        while (samples_played < total_samples_to_play) {
-            for (size_t i = 0; i < chunk_samples; i++) {
-                int16_t val = lut[lut_index];
-                dma_buffer[i * 2] = val;
-                dma_buffer[i * 2 + 1] = val;
-                lut_index = (lut_index + 1) % samples_per_cycle;
-            }
-
-            i2s_channel_write(*tx_handle, dma_buffer, buffer_size, &bytes_written,
-                              portMAX_DELAY);
-            samples_played += chunk_samples;
-        }
-
-        // Clean up: Push silence to clear the DMA buffer
-        memset(dma_buffer, 0, buffer_size);
-        i2s_channel_write(*tx_handle, dma_buffer, buffer_size, &bytes_written,
-                          portMAX_DELAY);
-
-        free(dma_buffer);
-    }
-
-    free(lut);
-    // Be careful with disable here; if you call play_beep frequently,
-    // maybe leave it enabled or move this to a dedicated stop function.
-    i2s_channel_disable(*tx_handle);
-}
-
-void TAS5805::test_performance_gap()
-{
-    const size_t test_samples = 1024;
-    int16_t *ram_buffer = (int16_t *)heap_caps_malloc(
-                              test_samples * 2 * sizeof(int16_t), MALLOC_CAP_DMA);
-
-    // Fill with a simple tone once
-    for (int i = 0; i < test_samples; i++) {
-        int16_t val = (int16_t)(10000 * sin(2 * M_PI * 440.0 * i / 44100.0));
-        ram_buffer[i * 2] = val;
-        ram_buffer[i * 2 + 1] = val;
-    }
-
-    // Loop 1000 times (about 23 seconds of audio)
-    for (int i = 0; i < 1000; i++) {
-        size_t written;
-        // Writing from RAM is near-instant.
-        // If this stutters, your I2S clock/GPIO config is the culprit.
-        i2s_channel_write(*tx_handle, ram_buffer,
-                          test_samples * 2 * sizeof(int16_t), &written,
-                          portMAX_DELAY);
-    }
-
-    // --- THE STOP SEQUENCE ---
-    // 1. Fill buffer with zeros (silence)
-    memset(ram_buffer, 0, test_samples * 2 * sizeof(int16_t));
-    size_t written;
-    // 2. Write silence to push the actual audio out of the DMA tail
-    i2s_channel_write(*tx_handle, ram_buffer, test_samples * 2 * sizeof(int16_t),
-                      &written, portMAX_DELAY);
-}
 
 void TAS5805::write_reg(const int reg, const uint8_t *cmd)
 {
     ESP_LOGD(TAG, "Writing to Register: 0x%02X", reg);
-    ESP_LOG_BUFFER_HEX(TAG, cmd, 1);
 
     // Put the register first, and then the data.
     uint8_t data[] = {static_cast<uint8_t>(reg), *cmd};

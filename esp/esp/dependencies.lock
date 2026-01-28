@@ -1,7 +1,6 @@
 dependencies:
   espressif/ethernet_init:
-    component_hash: 
-      b7303f1482091766b9b653ec8332775a9485f4df3c69141577de82847c4d2adf
+    component_hash: b7303f1482091766b9b653ec8332775a9485f4df3c69141577de82847c4d2adf
     dependencies:
     - matches:
       - if: $CONFIG{ETHERNET_SPI_USE_CH390} == 1
@@ -121,8 +120,7 @@ dependencies:
     - name: idf
       version: '>=4.1.0'
     source:
-      path: 
-        /home/david/go/src/github.com/ausocean/client/esp/esp/components/tas5805
+      path: /home/david/go/src/github.com/ausocean/client/esp/esp/components/tas5805
       type: local
     version: '*'
 direct_dependencies:
