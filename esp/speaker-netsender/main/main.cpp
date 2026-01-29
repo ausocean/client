@@ -37,7 +37,7 @@ extern "C" {
 #include "soc/clk_tree_defs.h"
 #include <stdio.h>
 #include <string.h>
-#include "freertos/FreeRTOS.h"
+#include "freertos/FreeRTOS.h" // IWYU pragma: keep
 #include "freertos/task.h"
 #include <ethernet_init.h>
 #include <esp_eth.h>
