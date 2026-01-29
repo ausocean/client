@@ -23,4 +23,18 @@ menu "Netsender"
             be kept at a value that makes the total config size be a multiple
             of 128 bytes.
 
+    config NETSENDER_REMOTE_HOST
+        string "Domain or IP of remote host"
+        default "http://data.cloudblue.org"
+        help
+            The remote server domain or IP that implements the server side of
+            the netsender protocol.
+
+    config NETSENDER_MAX_HTTP_OUTPUT_BUFFER
+        int "Maximum length of response buffer"
+        default 2048
+        range 1024 8192
+        help
+            The maximum allowed length of the response buffer from requests to
+            the server.
 endmenu

@@ -32,6 +32,7 @@
 #include "sdkconfig.h"
 #include <esp_netif.h>
 #include <esp_types.h>
+#include "esp_http_client.h"
 #include <optional>
 
 #define NETSENDER_MAC_SIZE     18
@@ -52,6 +53,9 @@ typedef enum {
     netsender_request_type_act    = 2,
     netsender_request_type_vars   = 3,
 } netsender_request_type_t;
+
+// Netsender request endpoints.
+static const char* netsender_endpoint_config = "/config";
 
 // Service response codes.
 typedef enum {
@@ -154,12 +158,27 @@ private:
     /**
      * Netsender Configuration.
      */
-    netsender_configuration_t config;
+    netsender_configuration_t config{};
+
+    /**
+     * string formatted MAC.
+     */
+    char mac[18];
+
+    /**
+     * @brief fetches netsender config from the remote server.
+     */
+    esp_err_t fetch_config();
 
     /**
      * Read the config from non-volatile storage (NVS).
      */
-    esp_err_t read_nvs_config(netsender_configuration_t* config);
+    esp_err_t read_nvs_config();
+
+    /**
+     * Write the config to non-volatile storage (NVS).
+     */
+    esp_err_t write_nvs_config();
 
     /**
      * Pins for inputs and outputs.
