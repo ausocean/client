@@ -280,7 +280,7 @@ void app_main(void)
         ESP_LOGE(TAG, "failed to play audio");
     }
     // amp->play(file_path);
-    Netsender ns;
 
+    Netsender ns;
     ns.print_config();
 }

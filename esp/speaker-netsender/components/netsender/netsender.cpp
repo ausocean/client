@@ -69,6 +69,12 @@ Netsender::Netsender()
     } else {
         configured = true;
     }
+
+    err = req_poll();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "unable to make poll request: %s", esp_err_to_name(err));
+    }
+    // TODO: Remove req_poll() from constructor.
 }
 
 esp_err_t Netsender::read_nvs_config()
@@ -141,20 +147,7 @@ void Netsender::print_config()
     }
 }
 
-bool Netsender::run(int* varsum)
-{
-    ESP_LOGI(TAG, "--- Starting Run Cycle ---");
-
-    return true;
-
-}
-
 Netsender::~Netsender() {}
-
-bool Netsender::request(netsender_request_type_t req, netsender_pin_t* inputs, netsender_pin_t* outputs, bool* reconfig, char* reply)
-{
-    return true;
-}
 
 esp_err_t http_event_handler(esp_http_client_event_t *evt)
 {
@@ -193,20 +186,7 @@ esp_err_t http_event_handler(esp_http_client_event_t *evt)
                     memcpy((char*)evt->user_data + output_len, evt->data, copy_len);
                 }
             } else {
-                int content_len = esp_http_client_get_content_length(evt->client);
-                if (output_buffer == NULL) {
-                    // We initialize output_buffer with 0 because it is used by strlen() and similar functions therefore should be null terminated.
-                    output_buffer = (char *) calloc(content_len + 1, sizeof(char));
-                    output_len = 0;
-                    if (output_buffer == NULL) {
-                        ESP_LOGE(TAG, "Failed to allocate memory for output buffer");
-                        return ESP_FAIL;
-                    }
-                }
-                copy_len = MIN(evt->data_len, (content_len - output_len));
-                if (copy_len) {
-                    memcpy(output_buffer + output_len, evt->data, copy_len);
-                }
+                ESP_LOGE(TAG, "client requests must attach user_data array to handle response body");
             }
             output_len += copy_len;
         }
@@ -245,13 +225,11 @@ esp_err_t http_event_handler(esp_http_client_event_t *evt)
     return ESP_OK;
 }
 
-esp_err_t Netsender::fetch_config()
+esp_err_t Netsender::req_config()
 {
     // Local buffer for response body.
-    char* resp_buf = (char*)calloc(1, MAX_HTTP_OUTPUT_BUFFER + 1);
-    if (resp_buf == NULL) {
-        return ESP_ERR_NO_MEM;
-    }
+    char resp_buf[MAX_HTTP_OUTPUT_BUFFER + 1] = {0};
+
     // Create URL array.
     static const int max_url_len = 148;
     char url[max_url_len];
@@ -352,8 +330,22 @@ esp_err_t Netsender::fetch_config()
     {
         esp_http_client_cleanup(http_handle);
     }
-    free(resp_buf);
 
+    return ESP_OK;
+}
+
+esp_err_t Netsender::req_poll()
+{
+    return ESP_OK;
+}
+
+esp_err_t Netsender::req_act()
+{
+    return ESP_OK;
+}
+
+esp_err_t Netsender::req_vars()
+{
     return ESP_OK;
 }
 
