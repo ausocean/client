@@ -30,6 +30,10 @@ extern "C" {
 }
 
 #include "driver/i2s_types.h"
+#include "freertos/projdefs.h"
+#include "netsender.hpp"
+#include "soc/clk_tree_defs.h"
+#include "driver/i2s_types.h"
 #include "esp_err.h"
 #include "netsender.hpp"
 #include "soc/clk_tree_defs.h"
@@ -66,9 +70,11 @@ static constexpr const char* AUDIO_FILE = "audio.wav";
 // Tag used in logs.
 static constexpr const char* TAG = "speaker";
 
+// Netsender Instance.
+static Netsender ns;
+
 // Event handler for Ethernet events.
-static void eth_event_handler(void *, esp_event_base_t,
-                              int32_t event_id, void *event_data)
+static void eth_event_handler(void *, esp_event_base_t, int32_t event_id, void *event_data)
 {
     uint8_t mac_addr[6] = {0};
 
@@ -279,8 +285,7 @@ void app_main(void)
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "failed to play audio");
     }
-    // amp->play(file_path);
 
-    Netsender ns;
-    ns.print_config();
+    // Start the netsender task.
+    ns.start();
 }

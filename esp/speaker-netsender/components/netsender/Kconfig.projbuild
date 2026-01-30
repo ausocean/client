@@ -37,4 +37,12 @@ menu "Netsender"
         help
             The maximum allowed length of the response buffer from requests to
             the server.
+
+    config NETSENDER_TASK_STACK_DEPTH
+        int "Stack depth for main netsender runtime"
+        default 4096
+        range 1024 8182
+        help
+            The depth allocated in static memory for the main NetSender task to run,
+            measured in bytes.
 endmenu
