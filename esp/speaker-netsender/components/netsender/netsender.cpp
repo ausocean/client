@@ -11,19 +11,24 @@
 #include "esp_log.h"
 #include "esp_mac.h"
 #include "freertos/FreeRTOS.h" // IWYU pragma: keep
+#include "freertos/projdefs.h"
 #include "freertos/task.h"
 #include "nvs.h"
 #include "nvs_flash.h"
+#include "portmacro.h"
 #include "sdkconfig.h"
 #include "esp_timer.h"
 #include "esp_tls.h"
 
 #define MAX_HTTP_RECV_BUFFER   512
-#define MAX_HTTP_OUTPUT_BUFFER 2048
 #define STORAGE_NAMESPACE      "netsender"
 #define CONFIG_NVS_KEY         "config"
 
 static const char *TAG = "netsender";
+
+// Static definition of the netsender task stack.
+static StackType_t ns_stack[CONFIG_NETSENDER_TASK_STACK_DEPTH];
+static StaticTask_t xTaskBuffer;
 
 // Forward Declarations.
 
@@ -70,11 +75,6 @@ Netsender::Netsender()
         configured = true;
     }
 
-    err = req_poll();
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "unable to make poll request: %s", esp_err_to_name(err));
-    }
-    // TODO: Remove req_poll() from constructor.
 }
 
 esp_err_t Netsender::read_nvs_config()
@@ -147,6 +147,26 @@ void Netsender::print_config()
     }
 }
 
+void Netsender::run()
+{
+    while (true) {
+        req_poll();
+        vTaskDelay(pdMS_TO_TICKS(10000)); //10s
+    }
+}
+
+void Netsender::task_wrapper(void *params)
+{
+    Netsender* instance = static_cast<Netsender*>(params);
+    instance->run();
+}
+
+void Netsender::start()
+{
+    // Structure that will hold the TCB of the task being created
+    xTaskCreateStatic(task_wrapper, "NetSender", CONFIG_NETSENDER_TASK_STACK_DEPTH, this, 0, ns_stack, &xTaskBuffer);
+}
+
 Netsender::~Netsender() {}
 
 esp_err_t http_event_handler(esp_http_client_event_t *evt)
@@ -171,7 +191,7 @@ esp_err_t http_event_handler(esp_http_client_event_t *evt)
         {
             // Clean the buffer in case of a new request.
             if (output_len == 0 && evt->user_data) {
-                memset(evt->user_data, 0, MAX_HTTP_OUTPUT_BUFFER);
+                memset(evt->user_data, 0, CONFIG_NETSENDER_MAX_HTTP_OUTPUT_BUFFER);
             }
 
             // NOTE: We will assume that the response is not chunked, as responses from
@@ -181,7 +201,7 @@ esp_err_t http_event_handler(esp_http_client_event_t *evt)
             int copy_len = 0;
             if (evt->user_data) {
                 // The last byte in evt->user_data is kept for the NULL character in case of out-of-bound access.
-                copy_len = MIN(evt->data_len, (MAX_HTTP_OUTPUT_BUFFER - output_len));
+                copy_len = MIN(evt->data_len, (CONFIG_NETSENDER_MAX_HTTP_OUTPUT_BUFFER - output_len));
                 if (copy_len) {
                     memcpy((char*)evt->user_data + output_len, evt->data, copy_len);
                 }
@@ -227,16 +247,6 @@ esp_err_t http_event_handler(esp_http_client_event_t *evt)
 
 esp_err_t Netsender::req_config()
 {
-    // Local buffer for response body.
-    char resp_buf[MAX_HTTP_OUTPUT_BUFFER + 1] = {0};
-
-    // Create URL array.
-    static const int max_url_len = 148;
-    char url[max_url_len];
-
-    // Calculate Uptime.
-    int64_t ut = esp_timer_get_time() / 1000000;
-
     // Create request url.
     snprintf(url, max_url_len,
              "%s%s"           // Host and Endpoint
@@ -251,7 +261,7 @@ esp_err_t Netsender::req_config()
              CONFIG_NETSENDER_REMOTE_HOST,
              netsender_endpoint_config,
              NETSENDER_VERSION, mac,
-             ut, NETSENDER_MODE_ONLINE
+             uptime(), NETSENDER_MODE_ONLINE
             );
 
     // Initialise the request.
@@ -336,6 +346,48 @@ esp_err_t Netsender::req_config()
 
 esp_err_t Netsender::req_poll()
 {
+    ESP_LOGI(TAG, "--- POLLING ---");
+
+    // Create request url.
+    snprintf(url, sizeof(url),
+             "%s%s"    // Domain and Enpoint.
+             "?ma=%s"  // MAC Address.
+             "&dk=%s"  // Device Key.
+             "&ut=%lld", // Uptime.
+             CONFIG_NETSENDER_REMOTE_HOST,
+             netsender_endpoint_poll,
+             mac, config.dkey, uptime()
+            );
+
+    // Initialise the request.
+    esp_http_client_config_t http_config = {
+        .url = url,
+        .method = HTTP_METHOD_GET,
+        .disable_auto_redirect = true,
+        .event_handler = http_event_handler,
+        .user_data = resp_buf,
+    };
+    esp_http_client_handle_t http_handle = esp_http_client_init(&http_config);
+
+    // Send the request.
+    esp_err_t err = esp_http_client_perform(http_handle);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    // Check the response code.
+    // TODO: Handle other response codes.
+    if (int status_code = esp_http_client_get_status_code(http_handle) != 200) {
+        ESP_LOGE(TAG, "got non 200 status code: %d", status_code);
+        return ESP_FAIL;
+    }
+
+    ESP_LOGI(TAG, "poll response: %s", resp_buf);
+
+    {
+        esp_http_client_cleanup(http_handle);
+    }
+
     return ESP_OK;
 }
 
@@ -347,6 +399,11 @@ esp_err_t Netsender::req_act()
 esp_err_t Netsender::req_vars()
 {
     return ESP_OK;
+}
+
+int64_t Netsender::uptime()
+{
+    return esp_timer_get_time() / 1000000;
 }
 
 bool extract_json(const std::string& json, const char* name, std::string& value)

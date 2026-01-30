@@ -29,6 +29,7 @@
 
 #pragma once
 
+#include "freertos/projdefs.h"
 #include "sdkconfig.h"
 #include <esp_netif.h>
 #include <esp_types.h>
@@ -56,6 +57,7 @@ typedef enum {
 
 // Netsender request endpoints.
 static const char* netsender_endpoint_config = "/config";
+static const char* netsender_endpoint_poll = "/poll";
 
 // Service response codes.
 typedef enum {
@@ -134,6 +136,11 @@ public:
      */
     esp_err_t heartbeat();
 
+    /**
+     * @brief start netsender task.
+     */
+    void start();
+
     ~Netsender();
 
 private:
@@ -144,6 +151,21 @@ private:
     bool configured;
 
     /**
+     * @brief internal buffer for HTTP response.
+     */
+    char resp_buf[CONFIG_NETSENDER_MAX_HTTP_OUTPUT_BUFFER + 1] = {0};
+
+    /**
+     * @brief maximum allowed length for a request url.
+     */
+    static const int max_url_len = 148;
+
+    /**
+     * @brief url used to make requests.
+     */
+    char url[max_url_len + 1];
+
+    /**
      * Netsender Configuration.
      */
     netsender_configuration_t config{};
@@ -152,6 +174,19 @@ private:
      * string formatted MAC.
      */
     char mac[18];
+
+    /**
+     * @brief wraps run function to create new task.
+     */
+    static void task_wrapper(void *params);
+
+    /**
+     * @brief main run loop of the netsender client.
+     *
+     * run is called by task_wrapper, to run the loop
+     * in a task.
+     */
+    void run();
 
     /**
      * @brief makes a config request to the remote server.
@@ -185,6 +220,11 @@ private:
      * Write the config to non-volatile storage (NVS).
      */
     esp_err_t write_nvs_config();
+
+    /**
+     * @brief returns time in seconds since last reboot.
+     */
+    int64_t uptime();
 
     /**
      * Pins for inputs and outputs.
