@@ -127,8 +127,6 @@ public:
      */
     void print_config();
 
-    bool run(int* varsum);
-
     /**
      * @brief makes a request to get variables.
      *
@@ -139,16 +137,6 @@ public:
     ~Netsender();
 
 private:
-    /**
-     * @brief make a request to remote server.
-     *
-     * @param req request type
-     * @param inputs Pins to send
-     * @param outputs Pins to receive
-     * @param reconfig reconfigure the client
-     * @param reply response body
-     */
-    bool request(netsender_request_type_t req, netsender_pin_t* inputs, netsender_pin_t* outputs, bool* reconfig, char* reply);
 
     /**
      * Netsender has been configured.
@@ -166,9 +154,27 @@ private:
     char mac[18];
 
     /**
-     * @brief fetches netsender config from the remote server.
+     * @brief makes a config request to the remote server.
+     *
+     * @sideeffect updates the instance config and NVS storage
+     * if the returned config has changed.
      */
-    esp_err_t fetch_config();
+    esp_err_t req_config();
+
+    /**
+     * @brief makes a poll request to the remote server.
+     */
+    esp_err_t req_poll();
+
+    /**
+     * @brief makes a act request to the remote server.
+     */
+    esp_err_t req_act();
+
+    /**
+     * @brief makes a vars request to the remote server.
+     */
+    esp_err_t req_vars();
 
     /**
      * Read the config from non-volatile storage (NVS).
