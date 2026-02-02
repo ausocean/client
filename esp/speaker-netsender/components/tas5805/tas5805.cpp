@@ -1,6 +1,7 @@
 #include "tas5805.hpp"
 #include "driver/i2c_master.h"
 #include "driver/i2s_common.h"
+#include "esp_err.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include <cstdint>
@@ -94,16 +95,18 @@ TAS5805::TAS5805(i2c_master_bus_handle_t i2c_bus_handle,
     vTaskDelay(pdMS_TO_TICKS(10));
 }
 
-void TAS5805::play(const char *path)
+esp_err_t TAS5805::play(const char *path)
 {
     // Ensure a valid I2S handle exists to send audio.
     if (tx_handle == NULL || *tx_handle == NULL) {
-        return;
+        ESP_LOGE(TAG, "tx_handle must be not-NULL to play audio");
+        return ESP_FAIL;
     }
 
     FILE *f = fopen(path, "rb");
     if (!f) {
         ESP_LOGE(TAG, "Could not open file: %s", path);
+        return ESP_FAIL;
     }
     // Create a 32KB staging buffer in internal DMA RAM, this improves SD
     // read/write performance.
@@ -119,7 +122,7 @@ void TAS5805::play(const char *path)
     // Read WAV header.
     wav_header_t header;
     if (fread(&header, sizeof(wav_header_t), 1, f) != 1) {
-        return;
+        return ESP_FAIL;
     }
 
     // Use 4096 samples as our working chunk.
@@ -142,7 +145,7 @@ void TAS5805::play(const char *path)
         if (i2s_buf) {
             free(i2s_buf);
         }
-        return;
+        return ESP_FAIL;
     }
 
     size_t samples_read;
@@ -183,6 +186,7 @@ void TAS5805::play(const char *path)
         free(fs_buf);
     }
 
+    return ESP_OK;
 }
 
 
