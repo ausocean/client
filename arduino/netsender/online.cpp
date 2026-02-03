@@ -192,7 +192,17 @@ bool wifiBegin() {
   if (ok) {
     ok = wifiConnect(Config.wifi);
     if (!ok && strcmp(Config.wifi, DEFAULT_WIFI) != 0) {
+      // The wifi cannot be reconfigured whilst it is still 
+      // trying to connect. So we turn it off, and back on.
+      ok = wifiControl(false);
+      if (!ok) {
+        return ok;
+      }
       delay(WIFI_DELAY);
+      ok = wifiControl(true);
+      if (!ok) {
+        return ok;
+      }
       ok = wifiConnect(DEFAULT_WIFI);
     }
   }
