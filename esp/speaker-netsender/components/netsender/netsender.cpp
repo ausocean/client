@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include "esp_log.h"
 #include "esp_mac.h"
+#include "esp_system.h"
 #include "freertos/FreeRTOS.h" // IWYU pragma: keep
 #include "freertos/projdefs.h"
 #include "freertos/task.h"
@@ -149,9 +150,30 @@ void Netsender::print_config()
 
 void Netsender::run()
 {
+    print_config();
+
+    TickType_t last_poll = 0;
+    TickType_t last_sleep = 0;
+    short seconds_since_poll = 0;
+    short seconds_awake = 0;
     while (true) {
-        req_poll();
-        vTaskDelay(pdMS_TO_TICKS(10000)); //10s
+        // Sleep client if active time has surpassed actPeriod.
+        seconds_awake = (xTaskGetTickCount() - last_sleep) * portTICK_PERIOD_MS / 1000;
+        if (seconds_awake >= config.actPeriod) {
+            // TODO: put into deep sleep until next poll is required.
+            seconds_awake = 0;
+            last_sleep = xTaskGetTickCount();
+        }
+
+        seconds_since_poll = (xTaskGetTickCount() - last_poll) * portTICK_PERIOD_MS / 1000;
+        if (seconds_since_poll >= config.monPeriod) {
+            req_poll();
+            last_poll = xTaskGetTickCount();
+            seconds_since_poll = 0;
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(10));
+
     }
 }
 
@@ -280,8 +302,8 @@ esp_err_t Netsender::req_config()
         return err;
     }
 
-    // Check the response code.
-    // TODO: Handle other response codes.
+    // Check the status code.
+    // TODO: Handle other status codes.
     if (int status_code = esp_http_client_get_status_code(http_handle) != 200) {
         ESP_LOGE(TAG, "got non 200 status code: %d", status_code);
         return ESP_FAIL;
@@ -375,29 +397,71 @@ esp_err_t Netsender::req_poll()
         return err;
     }
 
-    // Check the response code.
-    // TODO: Handle other response codes.
+    // Check the status code.
+    // TODO: Handle other status codes.
     if (int status_code = esp_http_client_get_status_code(http_handle) != 200) {
         ESP_LOGE(TAG, "got non 200 status code: %d", status_code);
         return ESP_FAIL;
     }
 
+    // TODO: Handle response.
     ESP_LOGI(TAG, "poll response: %s", resp_buf);
-
-    {
-        esp_http_client_cleanup(http_handle);
+    std::string rc;
+    auto has_rc = extract_json(std::string(resp_buf), "rc", rc);
+    if (has_rc) {
+        ESP_LOGD(TAG, "got response code: %s", rc.c_str());
+        if (handle_response_code(rc) != ESP_OK) {
+            ESP_LOGE(TAG, "failed to handle response code");
+        }
     }
 
-    return ESP_OK;
-}
+    // Cleanup http_handle.
+    ESP_ERROR_CHECK(esp_http_client_cleanup(http_handle));
 
-esp_err_t Netsender::req_act()
-{
     return ESP_OK;
 }
 
 esp_err_t Netsender::req_vars()
 {
+    // TODO: Implement vars requests.
+    return ESP_OK;
+}
+
+esp_err_t Netsender::handle_response_code(std::string code)
+{
+    auto rc = std::stoi(code);
+
+    esp_err_t err;
+    switch (rc) {
+    case netsender_rc_ok:
+        // Do nothing.
+        break;
+    case netsender_rc_update:
+        err = req_config();
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "update failed: %s", esp_err_to_name(err));
+        }
+        break;
+    case netsender_rc_reboot:
+        esp_restart();
+        break;
+    case netsender_rc_debug:
+        // TODO: implement debug?
+        break;
+    case netsender_rc_upgrade:
+        // TODO: implement upgrade?
+        break;
+    case netsender_rc_alarm:
+        // TODO: implement alarm.
+        break;
+    case netsender_rc_test:
+        // TODO: implement test.
+        break;
+    default:
+        ESP_LOGE(TAG, "got unexpected response code:");
+        return ESP_FAIL;
+    }
+
     return ESP_OK;
 }
 
@@ -406,7 +470,7 @@ int64_t Netsender::uptime()
     return esp_timer_get_time() / 1000000;
 }
 
-bool extract_json(const std::string& json, const char* name, std::string& value)
+bool extract_json(const std::string & json, const char* name, std::string & value)
 {
     size_t start = json.find(std::string("\"") + name + "\"");
     if (start == std::string::npos) {
