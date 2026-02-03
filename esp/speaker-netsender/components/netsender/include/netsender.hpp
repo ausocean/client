@@ -35,6 +35,7 @@
 #include <esp_types.h>
 #include "esp_http_client.h"
 #include <optional>
+#include <string>
 
 #define NETSENDER_MAC_SIZE     18
 #define NETSENDER_WIFI_SIZE    80
@@ -202,14 +203,14 @@ private:
     esp_err_t req_poll();
 
     /**
-     * @brief makes a act request to the remote server.
-     */
-    esp_err_t req_act();
-
-    /**
      * @brief makes a vars request to the remote server.
      */
     esp_err_t req_vars();
+
+    /**
+     * @brief handles response codes from server request.
+     */
+    esp_err_t handle_response_code(std::string rc);
 
     /**
      * Read the config from non-volatile storage (NVS).
