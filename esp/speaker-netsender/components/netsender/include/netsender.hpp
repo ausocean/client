@@ -35,6 +35,7 @@
 #include <esp_types.h>
 #include "esp_http_client.h"
 #include <optional>
+#include <functional>
 #include <string>
 
 constexpr const auto NETSENDER_MAC_SIZE       = 18;
@@ -112,12 +113,10 @@ struct netsender_configuration_t {
 // Pin represents a pin name and value and optional POST data.
 struct netsender_pin_t {
     char name [NETSENDER_PIN_SIZE];
-    std::optional<int> value; // std::nullopt indicates no invalid or no value.
+    std::function <std::optional<int64_t>()> read;
+    std::optional<int64_t> value;
     uint8_t * data;
 };
-
-// ReaderFunc represents a pin reading function.
-typedef std::optional<int> (*ReaderFunc)(netsender_pin_t *);
 
 class Netsender {
 public:
@@ -132,6 +131,11 @@ public:
      * @brief prints device config.
      */
     constexpr void print_config() const;
+
+    /**
+     * @brief append a read function and associated pin.
+     */
+    esp_err_t register_input(char* pin_name, std::function<std::optional<int64_t>()> read_func);
 
     /**
      * @brief makes a request to get variables.
@@ -168,6 +172,11 @@ private:
      * @brief url used to make requests.
      */
     char url[max_url_len + 1];
+
+    /**
+     * @appends a query parameter for a pin to a url.
+     */
+    void append_pin_to_url(char* url, netsender_pin_t &pin);
 
     /**
      * Netsender Configuration.
@@ -229,6 +238,12 @@ private:
      * @brief returns time in seconds since last reboot.
      */
     int64_t uptime() const;
+
+    /**
+     * Count of inputs and outputs.
+     */
+    size_t input_cnt = 0;
+    size_t output_cnt = 0;
 
     /**
      * Pins for inputs and outputs.
