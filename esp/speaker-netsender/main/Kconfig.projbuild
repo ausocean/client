@@ -1,0 +1,156 @@
+menu "SD Card"
+
+    config SD_MISO
+        int "SPI MISO Pin number"
+        range 1 255
+        default 12
+        help
+            Set the GPIO pin used as Master In for the SD card.
+
+
+    config SD_MOSI
+        int "SPI MOSI Pin number"
+        range 1 255
+        default 13
+        help
+            Set the GPIO pin used as Master Out for the SD card.
+
+
+    config SD_CLK
+        int "SPI CLK Pin number"
+        range 1 255
+        default 14
+        help
+            Set the GPIO pin used as Clock for the SD card.
+
+
+    config SD_CS
+        int "SPI CS Pin number"
+        range 1 255
+        default 15
+        help
+            Set the GPIO pin used as Chip Select for the SD card.
+
+
+    config SD_DET
+        int "SD detect Pin number"
+        range 1 255
+        default 5
+        help
+            Set the GPIO pin used as SD detect for the SD card.
+
+    config SD_QUADWP
+        int "Write Protect Pin number"
+        range -1 255
+        default -1
+        help
+            GPIO pin for WP (Write Protect) signal, or -1 if not used.
+
+    config SD_QUADHD
+        int "Hold Signal Pin number"
+        range -1 255
+        default -1
+        help
+            GPIO pin for HD (Hold) signal, or -1 if not used.
+
+    config SD_MAX_TRANSFER_SZ
+        int "Max Transfer Size"
+        range 1 32000
+        default 4000
+        help
+            Maximum transfer size, in bytes. Defaults to 4092 if 0 when DMA enabled, or to SOC_SPI_MAXIMUM_BUFFER_SIZE if DMA is disabled.
+
+endmenu
+menu "Amplifier"
+    menu "I2C Settings"
+
+        config AMP_I2C_ADDRESS
+        int "AMP I2C Address"
+        range 0 127
+        # The default amp address is 0x2D (45)
+        default 45 
+        help
+            I2C address of the attached Amplifier.
+
+        config AMP_I2C_PORT
+        int "I2C Port Number"
+        range 0 1
+        default 0
+        help
+            Port number to communicate with the Amplifier I2C interface.
+
+        config AMP_I2C_CLOCK_SPEED
+        int "I2C Clock Speed (Hz)"
+        range 1000 250000
+        default 0
+        help
+            Clock speed used by the I2C bus to communicate with the amplifier.
+
+        config AMP_I2C_SDA
+        int "I2C SDA GPIO pin number"
+        range 1 255
+        default 16
+        help
+            SDA Pin GPIO number.
+
+        config AMP_I2C_SCL
+        int "I2C SCL GPIO pin number"
+        range 1 255
+        default 18
+        help
+            SCL Pin GPIO number.
+    
+    endmenu
+
+    menu "I2S Settings"
+
+        config AMP_I2S_BCLK
+        int "I2S Bit Clock GPIO pin number"
+        range 1 255
+        default 33
+        help
+            BCLK (SCK) GPIO number
+
+        config AMP_I2S_WS
+        int "I2S Write Select GPIO Pin number"
+        range 1 255
+        default 32
+        help
+            WS (LRCLK) GPIO number
+        
+        config AMP_I2S_DOUT
+        int "I2S Data Out GPIO Pin number"
+        range 1 255
+        default 23
+        help
+            DOUT GPIO number
+
+        choice AMP_I2S_SAMPLE_RATE_CHOICE
+            prompt "Sample Rate of Audio (Hz)"
+            default AMP_I2S_SAMPLE_RATE_44100
+            help
+                Select the sample rate to use for the TAS5805 Amplifier.
+
+            config AMP_I2S_SAMPLE_RATE_32000
+                bool "32000"
+            config AMP_I2S_SAMPLE_RATE_44100
+                bool "44100"
+            config AMP_I2S_SAMPLE_RATE_48000
+                bool "48000"
+            config AMP_I2S_SAMPLE_RATE_88200
+                bool "88200"
+            config AMP_I2S_SAMPLE_RATE_96000
+                bool "96000"
+        endchoice
+
+        config AMP_I2S_SAMPLE_RATE
+            int
+            default 32000 if AMP_I2S_SAMPLE_RATE_32000
+            default 44100 if AMP_I2S_SAMPLE_RATE_44100
+            default 48000 if AMP_I2S_SAMPLE_RATE_48000
+            default 88200 if AMP_I2S_SAMPLE_RATE_88200
+            default 96000 if AMP_I2S_SAMPLE_RATE_96000
+
+    endmenu
+
+endmenu
