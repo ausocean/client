@@ -148,6 +148,25 @@ void Netsender::print_config()
     }
 }
 
+esp_err_t Netsender::register_input(char pin_name[NETSENDER_PIN_SIZE], std::optional<int64_t> (*read_func)())
+{
+    if (input_cnt >= CONFIG_NETSENDER_MAX_PINS) {
+        ESP_LOGE(TAG, "cannot register more than %d inputs", CONFIG_NETSENDER_MAX_PINS);
+        return ESP_FAIL;
+    }
+
+    ESP_LOGI(TAG, "registering new input: %s", pin_name);
+
+    auto pin = netsender_pin_t{};
+    memcpy(pin.name, pin_name, NETSENDER_PIN_SIZE);
+    pin.read = read_func;
+
+    inputs[input_cnt] = pin;
+    input_cnt++;
+
+    return ESP_OK;
+}
+
 void Netsender::run()
 {
     print_config();
@@ -366,6 +385,24 @@ esp_err_t Netsender::req_config()
     return ESP_OK;
 }
 
+void Netsender::append_pin_to_url(char* url, netsender_pin_t &pin)
+{
+    auto cur_len = strlen(url);
+
+    if (cur_len + 8 >= max_url_len) {
+        ESP_LOGE(TAG, "appending pin could exceed maximum url length");
+        return;
+    }
+
+    // Use ? seperator for first param, and & for all others.
+    auto sep = strchr(url, '?') == NULL ? "?" : "&";
+
+    snprintf(url + cur_len, (max_url_len + 1) - cur_len,
+             "%s%s=%lld",
+             sep, pin.name, pin.value.value()
+            );
+}
+
 esp_err_t Netsender::req_poll()
 {
     ESP_LOGI(TAG, "--- POLLING ---");
@@ -380,6 +417,17 @@ esp_err_t Netsender::req_poll()
              netsender_endpoint_poll,
              mac, config.dkey, uptime()
             );
+
+    for (auto i = 0; i < input_cnt; i++) {
+        auto &pin = inputs[i];
+        pin.value = pin.read();
+        if (pin.value.has_value()) {
+            ESP_LOGI(TAG, "read pin %s: %d", pin.name, pin.value.value());
+            append_pin_to_url(url, pin);
+        } else {
+            ESP_LOGE(TAG, "failed to read pin %s", pin.name);
+        }
+    }
 
     // Initialise the request.
     esp_http_client_config_t http_config = {

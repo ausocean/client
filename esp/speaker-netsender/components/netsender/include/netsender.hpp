@@ -108,7 +108,8 @@ typedef struct {
 // Pin represents a pin name and value and optional POST data.
 typedef struct {
     char name [NETSENDER_PIN_SIZE];
-    std::optional<int> value; // std::nullopt indicates no invalid or no value.
+    std::optional<int64_t> (*read)();
+    std::optional<int64_t> value;
     uint8_t * data;
 } netsender_pin_t;
 
@@ -129,6 +130,11 @@ public:
      * @brief prints device config.
      */
     void print_config();
+
+    /**
+     * @brief append a read function and associated pin.
+     */
+    esp_err_t register_input(char* pin_name, std::optional<int64_t> (*read_func)());
 
     /**
      * @brief makes a request to get variables.
@@ -165,6 +171,11 @@ private:
      * @brief url used to make requests.
      */
     char url[max_url_len + 1];
+
+    /**
+     * @appends a query parameter for a pin to a url.
+     */
+    void append_pin_to_url(char* url, netsender_pin_t &pin);
 
     /**
      * Netsender Configuration.
@@ -226,6 +237,12 @@ private:
      * @brief returns time in seconds since last reboot.
      */
     int64_t uptime();
+
+    /**
+     * Count of inputs and outputs.
+     */
+    size_t input_cnt = 0;
+    size_t output_cnt = 0;
 
     /**
      * Pins for inputs and outputs.
