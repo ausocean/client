@@ -37,46 +37,50 @@
 #include <optional>
 #include <string>
 
-#define NETSENDER_MAC_SIZE     18
-#define NETSENDER_WIFI_SIZE    80
-#define NETSENDER_PIN_SIZE     4
-#define NETSENDER_IO_SIZE      (CONFIG_NETSENDER_MAX_PINS * NETSENDER_PIN_SIZE)
-#define NETSENDER_MAX_HANDLERS 2
-#define NETSENDER_VERSION      "0.1.0"
+constexpr const auto NETSENDER_MAC_SIZE       = 18;
+constexpr const auto NETSENDER_WIFI_SIZE      = 80;
+constexpr const auto NETSENDER_PIN_SIZE       = 4;
+constexpr const auto NETSENDER_IO_SIZE        = (CONFIG_NETSENDER_MAX_PINS * NETSENDER_PIN_SIZE);
+constexpr const auto NETSENDER_MAX_HANDLERS   = 2;
+constexpr const auto NETSENDER_VERSION        = "0.1.0";
 
 // Device modes.
-constexpr const char* NETSENDER_MODE_ONLINE = "Normal";
-constexpr const char* NETSENDER_MODE_OFFLINE = "Offline";
+namespace netsender_mode {
+constexpr auto ONLINE = "Normal";
+constexpr auto OFFLINE = "Offline";
+};
 
 // Device requests.
-typedef enum {
-    netsender_request_type_config = 0,
-    netsender_request_type_poll   = 1,
-    netsender_request_type_act    = 2,
-    netsender_request_type_vars   = 3,
-} netsender_request_type_t;
+enum netsender_request_type_t {
+    NETSENDER_REQUEST_TYPE_CONFIG = 0,
+    NETSENDER_REQUEST_TYPE_POLL   = 1,
+    NETSENDER_REQUEST_TYPE_ACT    = 2,
+    NETSENDER_REQUEST_TYPE_VARS   = 3,
+};
 
 // Netsender request endpoints.
-static const char* netsender_endpoint_config = "/config";
-static const char* netsender_endpoint_poll = "/poll";
+namespace netsender_endpoint {
+static constexpr const auto CONFIG = "/config";
+static constexpr const auto POLL = "/poll";
+};
 
 // Service response codes.
-typedef enum {
-    netsender_rc_ok      = 0,
-    netsender_rc_update  = 1,
-    netsender_rc_reboot  = 2,
-    netsender_rc_debug   = 3,
-    netsender_rc_upgrade = 4,
-    netsender_rc_alarm   = 5,
-    netsender_rc_test    = 6
-}  netsender_rc_t;
+enum netsender_rc_t {
+    NETSENDER_RC_OK      = 0,
+    NETSENDER_RC_UPDATE  = 1,
+    NETSENDER_RC_REBOOT  = 2,
+    NETSENDER_RC_DEBUG   = 3,
+    NETSENDER_RC_UPGRADE = 4,
+    NETSENDER_RC_ALARM   = 5,
+    NETSENDER_RC_TEST    = 6
+};
 
 // Boot codes.
-typedef enum {
-    netsender_boot_code_normal = 0x00, // Normal reboot (operator requested).
-    netsender_boot_code_wiFi   = 0x01, // Reboot due to error when trying to disconnect from Wifi.
-    netsender_boot_code_alarm  = 0x02, // Alarm auto-restart.
-}  netsender_boot_code_t;
+enum netsender_boot_code_t {
+    NETSENDER_BOOT_CODE_NORMAL = 0x00, // Normal reboot (operator requested).
+    NETSENDER_BOOT_CODE_WIFI   = 0x01, // Reboot due to error when trying to disconnect from Wifi.
+    NETSENDER_BOOT_CODE_ALARM  = 0x02, // Alarm auto-restart.
+};
 
 /**
  * @brief netsender client configuration
@@ -93,7 +97,7 @@ typedef enum {
  *   Outputs        (length 80)  * 10 or 20 x 4
  *   Reserved       (length to pad to 384 bytes)
  */
-typedef struct {
+struct netsender_configuration_t {
     short version;
     short monPeriod;
     short actPeriod;
@@ -103,18 +107,17 @@ typedef struct {
     char inputs[NETSENDER_IO_SIZE];
     char outputs[NETSENDER_IO_SIZE];
     char reserved[CONFIG_NETSENDER_RESERVED_SIZE];
-} netsender_configuration_t;
+};
 
 // Pin represents a pin name and value and optional POST data.
-typedef struct {
+struct netsender_pin_t {
     char name [NETSENDER_PIN_SIZE];
     std::optional<int> value; // std::nullopt indicates no invalid or no value.
     uint8_t * data;
-} netsender_pin_t;
+};
 
 // ReaderFunc represents a pin reading function.
 typedef std::optional<int> (*ReaderFunc)(netsender_pin_t *);
-
 
 class Netsender {
 public:
@@ -128,7 +131,7 @@ public:
     /**
      * @brief prints device config.
      */
-    void print_config();
+    constexpr void print_config() const;
 
     /**
      * @brief makes a request to get variables.
@@ -159,7 +162,7 @@ private:
     /**
      * @brief maximum allowed length for a request url.
      */
-    static const int max_url_len = 148;
+    static constexpr const int max_url_len = 148;
 
     /**
      * @brief url used to make requests.
@@ -225,7 +228,7 @@ private:
     /**
      * @brief returns time in seconds since last reboot.
      */
-    int64_t uptime();
+    int64_t uptime() const;
 
     /**
      * Pins for inputs and outputs.

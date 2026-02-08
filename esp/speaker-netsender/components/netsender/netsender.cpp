@@ -1,3 +1,32 @@
+/*
+  Name:
+    netsender.cpp - An ESP-IDF component to implement the netsender protocol.
+
+  Description:
+    See https://www.cloudblue.org
+
+  Authors:
+    David Sutton <davidsutton@ausocean.org>
+
+  License:
+    Copyright (C) 2026 The Australian Ocean Lab (AusOcean).
+
+    This file is part of NetSender. NetSender is free software: you can
+    redistribute it and/or modify it under the terms of the GNU
+    General Public License as published by the Free Software
+    Foundation, either version 3 of the License, or (at your option)
+    any later version.
+
+    NetSender is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with NetSender in gpl.txt.  If not, see
+    <http://www.gnu.org/licenses/>.
+*/
+
 #include "netsender.hpp"
 #include "esp_err.h"
 #include "esp_http_client.h"
@@ -21,11 +50,11 @@
 #include "esp_timer.h"
 #include "esp_tls.h"
 
-#define MAX_HTTP_RECV_BUFFER   512
-#define STORAGE_NAMESPACE      "netsender"
-#define CONFIG_NVS_KEY         "config"
+static constexpr const auto MAX_HTTP_RECV_BUFFER = 512;
+static constexpr const auto STORAGE_NAMESPACE    = "netsender";
+static constexpr const auto CONFIG_NVS_KEY       = "config";
 
-static const char *TAG = "netsender";
+static constexpr const char *TAG = "netsender";
 
 // Static definition of the netsender task stack.
 static StackType_t ns_stack[CONFIG_NETSENDER_TASK_STACK_DEPTH];
@@ -71,9 +100,9 @@ Netsender::Netsender()
     err = read_nvs_config();
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "unable to read configuration from EEPROM: %s", esp_err_to_name(err));
-        configured = false;
+        this->configured = false;
     } else {
-        configured = true;
+        this->configured = true;
     }
 
 }
@@ -84,14 +113,14 @@ esp_err_t Netsender::read_nvs_config()
     nvs_handle_t nvs_handle;
 
     // Open the nvs and attach to the handle.
-    esp_err_t err = nvs_open(STORAGE_NAMESPACE, NVS_READWRITE, &nvs_handle);
+    auto err = nvs_open(STORAGE_NAMESPACE, NVS_READWRITE, &nvs_handle);
     if (err != ESP_OK) {
         return err;
     }
 
     // Read the config from the handle.
-    size_t config_size = sizeof(netsender_configuration_t);
-    err = nvs_get_blob(nvs_handle, CONFIG_NVS_KEY, &config, &config_size);
+    auto config_size = sizeof(netsender_configuration_t);
+    err = nvs_get_blob(nvs_handle, CONFIG_NVS_KEY, &this->config, &config_size);
     if (err != ESP_OK) {
         return err;
     }
@@ -108,20 +137,23 @@ esp_err_t Netsender::write_nvs_config()
     nvs_handle_t nvs_handle;
 
     // Open the nvs and attach to the handle.
-    esp_err_t err = nvs_open(STORAGE_NAMESPACE, NVS_READWRITE, &nvs_handle);
+    auto err = nvs_open(STORAGE_NAMESPACE, NVS_READWRITE, &nvs_handle);
     if (err != ESP_OK) {
         return err;
     }
 
     // Write the config to the handle.
-    size_t config_size = sizeof(netsender_configuration_t);
-    err = nvs_set_blob(nvs_handle, CONFIG_NVS_KEY, &config, config_size);
+    static constexpr const auto config_size = sizeof(netsender_configuration_t);
+    err = nvs_set_blob(nvs_handle, CONFIG_NVS_KEY, &this->config, config_size);
     if (err != ESP_OK) {
         return err;
     }
 
     // Commit the change.
-    nvs_commit(nvs_handle);
+    err = nvs_commit(nvs_handle);
+    if (err != ESP_OK) {
+        return err;
+    }
 
     // Close the nvs.
     nvs_close(nvs_handle);
@@ -129,20 +161,21 @@ esp_err_t Netsender::write_nvs_config()
     return ESP_OK;
 }
 
-void Netsender::print_config()
+constexpr void Netsender::print_config() const
 {
+    static constexpr const auto CONFIG_SIZE = sizeof(netsender_configuration_t);
     ESP_LOGI(TAG, "--- CONFIG ---");
     ESP_LOGI(TAG, "Netsender v%s", NETSENDER_VERSION);
-    ESP_LOGI(TAG, "MAC Address: %s", mac);
-    ESP_LOGI(TAG, "Configuration size: %d", sizeof(netsender_configuration_t));
-    if (configured) {
-        ESP_LOGI(TAG, "boot: %d", config.boot);
-        ESP_LOGI(TAG, "wifi: %s", config.wifi);
-        ESP_LOGI(TAG, "dkey: %s", config.dkey);
-        ESP_LOGI(TAG, "monPeriod: %d", config.monPeriod);
-        ESP_LOGI(TAG, "actPeriod: %d", config.actPeriod);
-        ESP_LOGI(TAG, "inputs: %d", config.inputs);
-        ESP_LOGI(TAG, "outputs: %d", config.outputs);
+    ESP_LOGI(TAG, "MAC Address: %s", this->mac);
+    ESP_LOGI(TAG, "Configuration size: %d", CONFIG_SIZE);
+    if (this->configured) {
+        ESP_LOGI(TAG, "boot: %d", this->config.boot);
+        ESP_LOGI(TAG, "wifi: %s", this->config.wifi);
+        ESP_LOGI(TAG, "dkey: %s", this->config.dkey);
+        ESP_LOGI(TAG, "monPeriod: %d", this->config.monPeriod);
+        ESP_LOGI(TAG, "actPeriod: %d", this->config.actPeriod);
+        ESP_LOGI(TAG, "inputs: %d", this->config.inputs);
+        ESP_LOGI(TAG, "outputs: %d", this->config.outputs);
     } else {
         ESP_LOGI(TAG, "unconfigured device...");
     }
@@ -159,14 +192,14 @@ void Netsender::run()
     while (true) {
         // Sleep client if active time has surpassed actPeriod.
         seconds_awake = (xTaskGetTickCount() - last_sleep) * portTICK_PERIOD_MS / 1000;
-        if (seconds_awake >= config.actPeriod) {
+        if (seconds_awake >= this->config.actPeriod) {
             // TODO: put into deep sleep until next poll is required.
             seconds_awake = 0;
             last_sleep = xTaskGetTickCount();
         }
 
         seconds_since_poll = (xTaskGetTickCount() - last_poll) * portTICK_PERIOD_MS / 1000;
-        if (seconds_since_poll >= config.monPeriod) {
+        if (seconds_since_poll >= this->config.monPeriod) {
             req_poll();
             last_poll = xTaskGetTickCount();
             seconds_since_poll = 0;
@@ -186,7 +219,7 @@ void Netsender::task_wrapper(void *params)
 void Netsender::start()
 {
     // Structure that will hold the TCB of the task being created
-    xTaskCreateStatic(task_wrapper, "NetSender", CONFIG_NETSENDER_TASK_STACK_DEPTH, this, 0, ns_stack, &xTaskBuffer);
+    xTaskCreateStatic(this->task_wrapper, "NetSender", CONFIG_NETSENDER_TASK_STACK_DEPTH, this, 0, ns_stack, &xTaskBuffer);
 }
 
 Netsender::~Netsender() {}
@@ -270,7 +303,7 @@ esp_err_t http_event_handler(esp_http_client_event_t *evt)
 esp_err_t Netsender::req_config()
 {
     // Create request url.
-    snprintf(url, max_url_len,
+    snprintf(this->url, this->max_url_len,
              "%s%s"           // Host and Endpoint
              "?vn=%s"         // Version
              "&ma=%s"         // MAC
@@ -281,30 +314,30 @@ esp_err_t Netsender::req_config()
              "&md=%s"         // Mode
              "&er=",        // Error
              CONFIG_NETSENDER_REMOTE_HOST,
-             netsender_endpoint_config,
-             NETSENDER_VERSION, mac,
-             uptime(), NETSENDER_MODE_ONLINE
+             netsender_endpoint::CONFIG,
+             NETSENDER_VERSION, this->mac,
+             uptime(), netsender_mode::ONLINE
             );
 
     // Initialise the request.
     esp_http_client_config_t http_config = {
-        .url = url,
+        .url = this->url,
         .method = HTTP_METHOD_GET,
         .disable_auto_redirect = true,
         .event_handler = http_event_handler,
-        .user_data = resp_buf,
+        .user_data = this->resp_buf,
     };
-    esp_http_client_handle_t http_handle = esp_http_client_init(&http_config);
+    auto http_handle = esp_http_client_init(&http_config);
 
     // Send the request.
-    esp_err_t err = esp_http_client_perform(http_handle);
+    auto err = esp_http_client_perform(http_handle);
     if (err != ESP_OK) {
         return err;
     }
 
     // Check the status code.
     // TODO: Handle other status codes.
-    if (int status_code = esp_http_client_get_status_code(http_handle) != 200) {
+    if (auto status_code = esp_http_client_get_status_code(http_handle) != 200) {
         ESP_LOGE(TAG, "got non 200 status code: %d", status_code);
         return ESP_FAIL;
     }
@@ -314,39 +347,39 @@ esp_err_t Netsender::req_config()
     // Parse the incoming config.
     std::string param;
     std::string json_resp(resp_buf);
-    if (extract_json(json_resp, "mp", param) && std::stoi(param) != config.monPeriod) {
-        config.monPeriod = std::stoi(param);
-        ESP_LOGI(TAG, "monPeriod changed: %d", config.monPeriod);
+    if (extract_json(json_resp, "mp", param) && std::stoi(param) != this->config.monPeriod) {
+        this->config.monPeriod = std::stoi(param);
+        ESP_LOGI(TAG, "monPeriod changed: %d", this->config.monPeriod);
         changed = true;
     }
-    if (extract_json(json_resp, "ap", param) && std::stoi(param) != config.actPeriod) {
-        config.actPeriod = std::stoi(param);
-        ESP_LOGI(TAG, "actPeriod changed: %d", config.actPeriod);
+    if (extract_json(json_resp, "ap", param) && std::stoi(param) != this->config.actPeriod) {
+        this->config.actPeriod = std::stoi(param);
+        ESP_LOGI(TAG, "actPeriod changed: %d", this->config.actPeriod);
         changed = true;
     }
-    if (extract_json(json_resp, "wi", param) && param != config.wifi) {
-        pad_copy(config.wifi, param.c_str(), NETSENDER_WIFI_SIZE);
-        ESP_LOGI(TAG, "wifi changed: %d", config.wifi);
+    if (extract_json(json_resp, "wi", param) && param != this->config.wifi) {
+        pad_copy(this->config.wifi, param.c_str(), NETSENDER_WIFI_SIZE);
+        ESP_LOGI(TAG, "wifi changed: %d", this->config.wifi);
         changed = true;
     }
-    if (extract_json(json_resp, "dk", param) && param != config.dkey) {
-        pad_copy(config.dkey, param.c_str(), CONFIG_NETSENDER_DKEY_SIZE);
-        ESP_LOGI(TAG, "dkey changed: %d", config.dkey);
+    if (extract_json(json_resp, "dk", param) && param != this->config.dkey) {
+        pad_copy(this->config.dkey, param.c_str(), CONFIG_NETSENDER_DKEY_SIZE);
+        ESP_LOGI(TAG, "dkey changed: %d", this->config.dkey);
         changed = true;
     }
-    if (extract_json(json_resp, "ip", param) && param != config.inputs) {
+    if (extract_json(json_resp, "ip", param) && param != this->config.inputs) {
         if (check_pins(param.c_str()) >= 0) {
-            pad_copy(config.inputs, param.c_str(), NETSENDER_IO_SIZE);
-            ESP_LOGI(TAG, "inputs changed: %d", config.inputs);
+            pad_copy(this->config.inputs, param.c_str(), NETSENDER_IO_SIZE);
+            ESP_LOGI(TAG, "inputs changed: %d", this->config.inputs);
             changed = true;
         } else {
             ESP_LOGW(TAG, "invalid inputs: %s", param.c_str());
         }
     }
-    if (extract_json(json_resp, "op", param) && param != config.outputs) {
+    if (extract_json(json_resp, "op", param) && param != this->config.outputs) {
         if (check_pins(param.c_str()) >= 0) {
-            pad_copy(config.outputs, param.c_str(), NETSENDER_IO_SIZE);
-            ESP_LOGI(TAG, "outputs changed: %d", config.outputs);
+            pad_copy(this->config.outputs, param.c_str(), NETSENDER_IO_SIZE);
+            ESP_LOGI(TAG, "outputs changed: %d", this->config.outputs);
             changed = true;
         } else {
             ESP_LOGW(TAG, "invalid outputs: %s", param.c_str());
@@ -354,14 +387,12 @@ esp_err_t Netsender::req_config()
     }
 
     if (changed) {
-        configured = true;
+        this->configured = true;
         write_nvs_config();
         print_config();
     }
 
-    {
-        esp_http_client_cleanup(http_handle);
-    }
+    ESP_ERROR_CHECK(esp_http_client_cleanup(http_handle));
 
     return ESP_OK;
 }
@@ -377,37 +408,37 @@ esp_err_t Netsender::req_poll()
              "&dk=%s"  // Device Key.
              "&ut=%lld", // Uptime.
              CONFIG_NETSENDER_REMOTE_HOST,
-             netsender_endpoint_poll,
-             mac, config.dkey, uptime()
+             netsender_endpoint::POLL,
+             this->mac, this->config.dkey, uptime()
             );
 
     // Initialise the request.
     esp_http_client_config_t http_config = {
-        .url = url,
+        .url = this->url,
         .method = HTTP_METHOD_GET,
         .disable_auto_redirect = true,
         .event_handler = http_event_handler,
-        .user_data = resp_buf,
+        .user_data = this->resp_buf,
     };
-    esp_http_client_handle_t http_handle = esp_http_client_init(&http_config);
+    auto http_handle = esp_http_client_init(&http_config);
 
     // Send the request.
-    esp_err_t err = esp_http_client_perform(http_handle);
+    auto err = esp_http_client_perform(http_handle);
     if (err != ESP_OK) {
         return err;
     }
 
     // Check the status code.
     // TODO: Handle other status codes.
-    if (int status_code = esp_http_client_get_status_code(http_handle) != 200) {
+    if (auto status_code = esp_http_client_get_status_code(http_handle) != 200) {
         ESP_LOGE(TAG, "got non 200 status code: %d", status_code);
         return ESP_FAIL;
     }
 
     // TODO: Handle response.
-    ESP_LOGI(TAG, "poll response: %s", resp_buf);
+    ESP_LOGI(TAG, "poll response: %s", this->resp_buf);
     std::string rc;
-    auto has_rc = extract_json(std::string(resp_buf), "rc", rc);
+    auto has_rc = extract_json(std::string(this->resp_buf), "rc", rc);
     if (has_rc) {
         ESP_LOGD(TAG, "got response code: %s", rc.c_str());
         if (handle_response_code(rc) != ESP_OK) {
@@ -429,32 +460,32 @@ esp_err_t Netsender::req_vars()
 
 esp_err_t Netsender::handle_response_code(std::string code)
 {
-    auto rc = std::stoi(code);
+    const auto rc = std::stoi(code);
 
     esp_err_t err;
     switch (rc) {
-    case netsender_rc_ok:
+    case NETSENDER_RC_OK:
         // Do nothing.
         break;
-    case netsender_rc_update:
+    case NETSENDER_RC_UPDATE:
         err = req_config();
         if (err != ESP_OK) {
             ESP_LOGE(TAG, "update failed: %s", esp_err_to_name(err));
         }
         break;
-    case netsender_rc_reboot:
+    case NETSENDER_RC_REBOOT:
         esp_restart();
         break;
-    case netsender_rc_debug:
+    case NETSENDER_RC_DEBUG:
         // TODO: implement debug?
         break;
-    case netsender_rc_upgrade:
+    case NETSENDER_RC_UPGRADE:
         // TODO: implement upgrade?
         break;
-    case netsender_rc_alarm:
+    case NETSENDER_RC_ALARM:
         // TODO: implement alarm.
         break;
-    case netsender_rc_test:
+    case NETSENDER_RC_TEST:
         // TODO: implement test.
         break;
     default:
@@ -465,7 +496,7 @@ esp_err_t Netsender::handle_response_code(std::string code)
     return ESP_OK;
 }
 
-int64_t Netsender::uptime()
+int64_t Netsender::uptime() const
 {
     return esp_timer_get_time() / 1000000;
 }
