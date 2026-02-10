@@ -63,6 +63,7 @@ enum netsender_request_type_t {
 namespace netsender_endpoint {
 static constexpr const auto CONFIG = "/config";
 static constexpr const auto POLL = "/poll";
+static constexpr const auto VARS = "/vars";
 };
 
 // Service response codes.
@@ -118,6 +119,10 @@ struct netsender_pin_t {
     uint8_t * data;
 };
 
+// extract_json gets a string or integer value from JSON.
+// NB: This is NOT a general-purpose JSON parser.
+bool netsender_extract_json(const std::string& json, const char* name, std::string& value);
+
 class Netsender {
 public:
     /**
@@ -136,6 +141,13 @@ public:
      * @brief append a read function and associated pin.
      */
     esp_err_t register_input(char* pin_name, std::function<std::optional<int64_t>()> read_func);
+
+    /**
+     * @brief register a callback to handle variable parsing.
+     *
+     * @param parser_func callback function to be called with the var request response.
+     */
+    esp_err_t register_variable_parser(std::function<esp_err_t(std::string)> parser_func);
 
     /**
      * @brief makes a request to get variables.
@@ -157,6 +169,11 @@ private:
      * Netsender has been configured.
      */
     bool configured;
+
+    /**
+     * Latest varsum value.
+     */
+    int32_t varsum = 0;
 
     /**
      * @brief internal buffer for HTTP response.
@@ -250,4 +267,9 @@ private:
      */
     netsender_pin_t inputs[CONFIG_NETSENDER_MAX_PINS];
     netsender_pin_t outputs[CONFIG_NETSENDER_MAX_PINS];
+
+    /**
+     * @brief callback used to handle variable parsing.
+     */
+    std::function<esp_err_t(std::string)> parse_variable_callback;
 };
