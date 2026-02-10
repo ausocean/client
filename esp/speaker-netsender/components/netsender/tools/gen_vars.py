@@ -2,14 +2,6 @@ import json
 import subprocess
 import sys
 
-JSON_TYPES = {"byte", "stirng"}
-
-# Map JSON types to enum values.
-ENUM_TYPE_MAP = {"byte": "BYTE", "string": "STRING"}
-
-# Map JSON types to C types.
-C_TYPE_MAP = {"byte": "char", "string": "char*"}
-
 
 def astyle_format_file(filepath):
     """
@@ -45,6 +37,17 @@ def generate_header(json_path, output_path):
     """
     Generates a C++ header file (.hpp) from the passed JSON file, and puts it in the specified output path.
     """
+
+    class VarType:
+        BYTE = "byte"
+        STRING = "string"
+
+    # Map JSON types to enum values.
+    ENUM_TYPE_MAP = {VarType.BYTE: "BYTE", VarType.STRING: "STRING"}
+
+    # Map JSON types to C types.
+    C_TYPE_MAP = {VarType.BYTE: "char", VarType.STRING: "char*"}
+
     # Open the JSON file.
     with open(json_path, "r") as f:
         data = json.load(f)
@@ -67,15 +70,13 @@ def generate_header(json_path, output_path):
         f.write(f"// Generated for {client_name} {latest_version}\n\n")
 
         # Namespace the header file.
-        f.write("namespace netsender {\n")
+        f.write("namespace netsender {\n\n")
 
         # Generate enums.
-        f.write("""
-            enum var_type_t {
-                BYTE = 0,
-                STRING = 1,
-            };\n
-            """)
+        f.write("enum var_type_t {\n")
+        for i, type in enumerate(ENUM_TYPE_MAP):
+            f.write(f"{ENUM_TYPE_MAP[type]} = {i},\n")
+        f.write("};\n\n")
 
         f.write(f"constexpr const auto VAR_COUNT = {var_count};\n\n")
 
@@ -97,8 +98,7 @@ def generate_header(json_path, output_path):
         f.write("struct device_var_state_t {\n")
         for var in vars:
             c_type = C_TYPE_MAP.get(var["type"], "void*")
-            # For strings, we might want a fixed buffer or a pointer
-            if var["type"] == "string":
+            if var["type"] == VarType.STRING:
                 f.write(f"    char {var['name']}[64];\n")
             else:
                 f.write(f"    {c_type} {var['name']};\n")
@@ -112,11 +112,11 @@ def generate_header(json_path, output_path):
         for i, var in enumerate(vars):
             f.write(f"case {i}:\n")
             match var["type"]:
-                case "byte":
+                case VarType.BYTE:
                     f.write(
                         f"state.{var['name']} = static_cast<char>(std::stoi(val));\n"
                     )
-                case "string":
+                case VarType.STRING:
                     f.write(
                         f"strncpy(state.{var['name']}, val.c_str(), sizeof(state.{var['name']}) - 1);\n"
                     )
