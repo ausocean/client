@@ -32,6 +32,7 @@ extern "C" {
 #include "driver/i2s_types.h"
 #include "freertos/projdefs.h"
 #include "netsender.hpp"
+#include "include/netsender_vars.hpp"
 #include "soc/clk_tree_defs.h"
 #include "driver/i2s_types.h"
 #include "esp_err.h"
@@ -72,6 +73,9 @@ static constexpr const char* TAG = "speaker";
 
 // Netsender Instance.
 static Netsender ns;
+
+// Device variables.
+static netsender::device_var_state_t vars;
 
 // Event handler for Ethernet events.
 static void eth_event_handler(void *, esp_event_base_t, int32_t event_id, void *event_data)
@@ -260,6 +264,36 @@ static TAS5805 init_amp()
     return TAS5805(bus_handle, tx_handle);
 }
 
+// Callback function to be registered with NetSender to parse vars response.
+esp_err_t parse_vars(std::string var_resp)
+{
+    ESP_LOGD(TAG, "parsing variables in callback");
+
+    // Get the ID in the response.
+    std::string id;
+    auto has_id = netsender_extract_json(var_resp, "id", id);
+    if (!has_id) {
+        ESP_LOGE(TAG, "unable to get ID from var response");
+        return ESP_FAIL;
+    }
+
+    // Parse the registered variables into the vars struct.
+    std::string val;
+    bool has_val;
+    for (auto i = 0; i < netsender::VAR_COUNT; i++) {
+        auto var_name = id + "." + netsender::VARIABLES[i];
+        ESP_LOGI(TAG, "looking for variable: %s", var_name.c_str());
+        has_val = netsender_extract_json(var_resp, var_name.c_str(), val);
+        if (has_val) {
+            netsender::update_state_member(vars, i, val);
+            ESP_LOGI(TAG, "got variable: %s=%s", var_name.c_str(), val.c_str());
+        }
+    }
+
+
+    return ESP_OK;
+}
+
 void app_main(void)
 {
     ESP_LOGI(TAG, "Speaker Netsender Version: %s", SPEAKER_VERSION);
@@ -285,6 +319,9 @@ void app_main(void)
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "failed to play audio");
     }
+
+    // Register callback function to parse variables.
+    ns.register_variable_parser(parse_vars);
 
     // Start the netsender task.
     ns.start();
