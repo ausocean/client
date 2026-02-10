@@ -1,0 +1,10 @@
+{
+  "esp-speaker": {
+    "v0.0.1": {
+      "variables": [
+        { "name": "Volume", "type": "byte" },
+        { "name": "FilePath", "type": "string" }
+      ]
+    }
+  }
+}
