@@ -62,10 +62,6 @@ static StaticTask_t xTaskBuffer;
 
 // Forward Declarations.
 
-// extract_json gets a string or integer value from JSON.
-// NB: This is NOT a general-purpose JSON parser.
-bool extract_json(const std::string& json, const char* name, std::string& value);
-
 // pad_copy copies a string, padding with null characters
 void pad_copy(char * dst, const char * src, size_t size);
 
@@ -196,6 +192,15 @@ esp_err_t Netsender::register_input(char pin_name[NETSENDER_PIN_SIZE], std::func
 
     inputs[input_cnt] = pin;
     input_cnt++;
+
+    return ESP_OK;
+}
+
+esp_err_t Netsender::register_variable_parser(std::function<esp_err_t(std::string)> parser_func)
+{
+    ESP_LOGD(TAG, "registering new variable callback");
+
+    this->parse_variable_callback = parser_func;
 
     return ESP_OK;
 }
@@ -366,27 +371,27 @@ esp_err_t Netsender::req_config()
     // Parse the incoming config.
     std::string param;
     std::string json_resp(resp_buf);
-    if (extract_json(json_resp, "mp", param) && std::stoi(param) != this->config.monPeriod) {
+    if (netsender_extract_json(json_resp, "mp", param) && std::stoi(param) != this->config.monPeriod) {
         this->config.monPeriod = std::stoi(param);
         ESP_LOGI(TAG, "monPeriod changed: %d", this->config.monPeriod);
         changed = true;
     }
-    if (extract_json(json_resp, "ap", param) && std::stoi(param) != this->config.actPeriod) {
+    if (netsender_extract_json(json_resp, "ap", param) && std::stoi(param) != this->config.actPeriod) {
         this->config.actPeriod = std::stoi(param);
         ESP_LOGI(TAG, "actPeriod changed: %d", this->config.actPeriod);
         changed = true;
     }
-    if (extract_json(json_resp, "wi", param) && param != this->config.wifi) {
+    if (netsender_extract_json(json_resp, "wi", param) && param != this->config.wifi) {
         pad_copy(this->config.wifi, param.c_str(), NETSENDER_WIFI_SIZE);
         ESP_LOGI(TAG, "wifi changed: %d", this->config.wifi);
         changed = true;
     }
-    if (extract_json(json_resp, "dk", param) && param != this->config.dkey) {
+    if (netsender_extract_json(json_resp, "dk", param) && param != this->config.dkey) {
         pad_copy(this->config.dkey, param.c_str(), CONFIG_NETSENDER_DKEY_SIZE);
         ESP_LOGI(TAG, "dkey changed: %d", this->config.dkey);
         changed = true;
     }
-    if (extract_json(json_resp, "ip", param) && param != this->config.inputs) {
+    if (netsender_extract_json(json_resp, "ip", param) && param != this->config.inputs) {
         if (check_pins(param.c_str()) >= 0) {
             pad_copy(this->config.inputs, param.c_str(), NETSENDER_IO_SIZE);
             ESP_LOGI(TAG, "inputs changed: %d", this->config.inputs);
@@ -395,7 +400,7 @@ esp_err_t Netsender::req_config()
             ESP_LOGW(TAG, "invalid inputs: %s", param.c_str());
         }
     }
-    if (extract_json(json_resp, "op", param) && param != this->config.outputs) {
+    if (netsender_extract_json(json_resp, "op", param) && param != this->config.outputs) {
         if (check_pins(param.c_str()) >= 0) {
             pad_copy(this->config.outputs, param.c_str(), NETSENDER_IO_SIZE);
             ESP_LOGI(TAG, "outputs changed: %d", this->config.outputs);
@@ -486,11 +491,22 @@ esp_err_t Netsender::req_poll()
     // TODO: Handle response.
     ESP_LOGI(TAG, "poll response: %s", this->resp_buf);
     std::string rc;
-    auto has_rc = extract_json(std::string(this->resp_buf), "rc", rc);
+    auto resp = std::string(resp_buf);
+    auto has_rc = netsender_extract_json(resp, "rc", rc);
     if (has_rc) {
         ESP_LOGD(TAG, "got response code: %s", rc.c_str());
         if (handle_response_code(rc) != ESP_OK) {
             ESP_LOGE(TAG, "failed to handle response code");
+        }
+    }
+
+    std::string vs;
+    auto has_vs = netsender_extract_json(resp, "vs", vs);
+    if (has_vs) {
+        ESP_LOGD(TAG, "got varsum: %s", vs.c_str());
+        if (std::stoi(vs) != this->varsum) {
+            ESP_LOGD(TAG, "varsum changed, getting vars");
+            req_vars();
         }
     }
 
@@ -502,7 +518,61 @@ esp_err_t Netsender::req_poll()
 
 esp_err_t Netsender::req_vars()
 {
-    // TODO: Implement vars requests.
+    ESP_LOGI(TAG, "--- REQUESTING VARS ---");
+
+    // Create request url.
+    snprintf(url, sizeof(url),
+             "%s%s"    // Domain and Enpoint.
+             "?ma=%s"  // MAC Address.
+             "&dk=%s",  // Device Key.
+             CONFIG_NETSENDER_REMOTE_HOST,
+             netsender_endpoint::VARS,
+             this->mac, this->config.dkey
+            );
+
+    // Initialise the request.
+    esp_http_client_config_t http_config = {
+        .url = this->url,
+        .method = HTTP_METHOD_GET,
+        .disable_auto_redirect = true,
+        .event_handler = http_event_handler,
+        .user_data = this->resp_buf,
+    };
+    auto http_handle = esp_http_client_init(&http_config);
+
+    // Send the request.
+    auto err = esp_http_client_perform(http_handle);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    // Check the status code.
+    // TODO: Handle other status codes.
+    if (auto status_code = esp_http_client_get_status_code(http_handle) != 200) {
+        ESP_LOGE(TAG, "got non 200 status code: %d", status_code);
+        return ESP_FAIL;
+    }
+
+    ESP_LOGI(TAG, "vars response: %s", this->resp_buf);
+    std::string vs;
+    auto resp = std::string(resp_buf);
+
+    err = this->parse_variable_callback(resp);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "unable to parse variables in callback");
+        return ESP_FAIL;
+    }
+
+    auto has_vs = netsender_extract_json(resp, "vs", vs);
+    if (has_vs) {
+        ESP_LOGD(TAG, "got varsum: %s", vs.c_str());
+        // Update varsum with new varsum.
+        this->varsum = std::stoi(vs);
+    }
+
+    // Cleanup http_handle.
+    ESP_ERROR_CHECK(esp_http_client_cleanup(http_handle));
+
     return ESP_OK;
 }
 
@@ -549,7 +619,7 @@ int64_t Netsender::uptime() const
     return esp_timer_get_time() / 1000000;
 }
 
-bool extract_json(const std::string & json, const char* name, std::string & value)
+bool netsender_extract_json(const std::string & json, const char* name, std::string & value)
 {
     size_t start = json.find(std::string("\"") + name + "\"");
     if (start == std::string::npos) {
