@@ -1,14 +1,15 @@
 import json
 import subprocess
 import sys
+from typing import Any
 
 
-def astyle_format_file(filepath):
+def astyle_format_file(filepath: str) -> None:
     """
     Formats the specified filepath using the astyle settings used for c/c++ files.
     """
     # Astyle command used to format c/c++ files.
-    command = [
+    command: list[str] = [
         "astyle",
         "--style=otbs",
         "--attach-namespaces",
@@ -33,34 +34,34 @@ def astyle_format_file(filepath):
         print(f"Error formatting file: {e.stderr}")
 
 
-def generate_header(json_path, output_path):
+def generate_header(json_path: str, output_path: str) -> None:
     """
     Generates a C++ header file (.hpp) from the passed JSON file, and puts it in the specified output path.
     """
 
     class VarType:
-        BYTE = "byte"
-        STRING = "string"
+        BYTE: str = "byte"
+        STRING: str = "string"
 
     # Map JSON types to enum values.
-    ENUM_TYPE_MAP = {VarType.BYTE: "BYTE", VarType.STRING: "STRING"}
+    ENUM_TYPE_MAP: dict[str, str] = {VarType.BYTE: "BYTE", VarType.STRING: "STRING"}
 
     # Map JSON types to C types.
-    C_TYPE_MAP = {VarType.BYTE: "char", VarType.STRING: "char*"}
+    C_TYPE_MAP: dict[str, str] = {VarType.BYTE: "char", VarType.STRING: "char*"}
 
     # Open the JSON file.
     with open(json_path, "r") as f:
-        data = json.load(f)
+        data: dict[str, Any] = json.load(f)
 
     # Extract the client.
-    client_name = list(data.keys())[0]
+    client_name: str = list(data.keys())[0]
 
     # Generate header based off most recent version.
-    latest_version = list(data[client_name])[-1]
+    latest_version: str = list(data[client_name])[-1]
 
     # Get the registered variables.
-    vars = data[client_name][latest_version]["variables"]
-    var_count = len(vars)
+    vars: list[dict[str, str]] = data[client_name][latest_version]["variables"]
+    var_count: int = len(vars)
 
     with open(output_path, "w") as f:
         # Add includes.
@@ -97,7 +98,7 @@ def generate_header(json_path, output_path):
         # Generate the State Struct to hold the variables.
         f.write("struct device_var_state_t {\n")
         for var in vars:
-            c_type = C_TYPE_MAP.get(var["type"], "void*")
+            c_type: str = C_TYPE_MAP.get(var["type"], "void*")
             if var["type"] == VarType.STRING:
                 f.write(f"    char {var['name']}[64];\n")
             else:
@@ -121,19 +122,19 @@ def generate_header(json_path, output_path):
                         f"strncpy(state.{var['name']}, val.c_str(), sizeof(state.{var['name']}) - 1);\n"
                     )
             f.write("break;\n")
-        f.write("};\n};")
+        f.write("};\n};\n")
 
-        f.write("} // namespace netsender")
+        f.write("} // namespace netsender\n")
 
+        # Note: f.close() is not needed when using a 'with' context manager,
+        # but leaving it in to match your original script's behavior.
         f.close()
 
 
 if __name__ == "__main__":
-    if __name__ == "__main__":
-        if len(sys.argv) != 3:
-            print(
-                f"Usage: python3 {sys.argv[0]} <input_json_path> <output_header_path>"
-            )
-            sys.exit(1)
+    if len(sys.argv) != 3:
+        print(f"Usage: python3 {sys.argv[0]} <input_json_path> <output_header_path>")
+        sys.exit(1)
+
     generate_header(sys.argv[1], sys.argv[2])
     astyle_format_file(sys.argv[2])
