@@ -181,16 +181,6 @@ private:
     char resp_buf[CONFIG_NETSENDER_MAX_HTTP_OUTPUT_BUFFER + 1] = {0};
 
     /**
-     * @brief maximum allowed length for a request url.
-     */
-    static constexpr const int max_url_len = 148;
-
-    /**
-     * @brief url used to make requests.
-     */
-    char url[max_url_len + 1];
-
-    /**
      * @appends a query parameter for a pin to a url.
      */
     void append_pin_to_url(char* url, netsender_pin_t &pin);

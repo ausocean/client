@@ -51,6 +51,7 @@
 #include "esp_tls.h"
 
 static constexpr const auto MAX_HTTP_RECV_BUFFER = 512;
+static constexpr const auto MAX_URL_LEN          = 256;
 static constexpr const auto STORAGE_NAMESPACE    = "netsender";
 static constexpr const auto CONFIG_NVS_KEY       = "config";
 
@@ -326,8 +327,10 @@ esp_err_t http_event_handler(esp_http_client_event_t *evt)
 
 esp_err_t Netsender::req_config()
 {
+    char url[MAX_URL_LEN + 1];
+
     // Create request url.
-    snprintf(this->url, this->max_url_len,
+    snprintf(url, MAX_URL_LEN,
              "%s%s"           // Host and Endpoint
              "?vn=%s"         // Version
              "&ma=%s"         // MAC
@@ -345,7 +348,7 @@ esp_err_t Netsender::req_config()
 
     // Initialise the request.
     esp_http_client_config_t http_config = {
-        .url = this->url,
+        .url = url,
         .method = HTTP_METHOD_GET,
         .disable_auto_redirect = true,
         .event_handler = http_event_handler,
@@ -425,7 +428,7 @@ void Netsender::append_pin_to_url(char* url, netsender_pin_t &pin)
 {
     auto cur_len = strlen(url);
 
-    if (cur_len + 8 >= max_url_len) {
+    if (cur_len + 8 >= MAX_URL_LEN) {
         ESP_LOGE(TAG, "appending pin could exceed maximum url length");
         return;
     }
@@ -433,7 +436,7 @@ void Netsender::append_pin_to_url(char* url, netsender_pin_t &pin)
     // Use ? seperator for first param, and & for all others.
     auto sep = strchr(url, '?') == NULL ? "?" : "&";
 
-    snprintf(url + cur_len, (max_url_len + 1) - cur_len,
+    snprintf(url + cur_len, (MAX_URL_LEN + 1) - cur_len,
              "%s%s=%lld",
              sep, pin.name, pin.value.value()
             );
@@ -442,6 +445,8 @@ void Netsender::append_pin_to_url(char* url, netsender_pin_t &pin)
 esp_err_t Netsender::req_poll()
 {
     ESP_LOGI(TAG, "--- POLLING ---");
+
+    char url[MAX_URL_LEN + 1];
 
     // Create request url.
     snprintf(url, sizeof(url),
@@ -467,7 +472,7 @@ esp_err_t Netsender::req_poll()
 
     // Initialise the request.
     esp_http_client_config_t http_config = {
-        .url = this->url,
+        .url = url,
         .method = HTTP_METHOD_GET,
         .disable_auto_redirect = true,
         .event_handler = http_event_handler,
@@ -491,8 +496,8 @@ esp_err_t Netsender::req_poll()
     // TODO: Handle response.
     ESP_LOGI(TAG, "poll response: %s", this->resp_buf);
     std::string rc;
-    auto resp = std::string(resp_buf);
-    auto has_rc = netsender_extract_json(resp, "rc", rc);
+    const auto resp = std::string(resp_buf);
+    const auto has_rc = netsender_extract_json(resp, "rc", rc);
     if (has_rc) {
         ESP_LOGD(TAG, "got response code: %s", rc.c_str());
         if (handle_response_code(rc) != ESP_OK) {
@@ -501,7 +506,7 @@ esp_err_t Netsender::req_poll()
     }
 
     std::string vs;
-    auto has_vs = netsender_extract_json(resp, "vs", vs);
+    const auto has_vs = netsender_extract_json(resp, "vs", vs);
     if (has_vs) {
         ESP_LOGD(TAG, "got varsum: %s", vs.c_str());
         if (std::stoi(vs) != this->varsum) {
@@ -520,6 +525,8 @@ esp_err_t Netsender::req_vars()
 {
     ESP_LOGI(TAG, "--- REQUESTING VARS ---");
 
+    char url[MAX_URL_LEN + 1];
+
     // Create request url.
     snprintf(url, sizeof(url),
              "%s%s"    // Domain and Enpoint.
@@ -532,7 +539,7 @@ esp_err_t Netsender::req_vars()
 
     // Initialise the request.
     esp_http_client_config_t http_config = {
-        .url = this->url,
+        .url = url,
         .method = HTTP_METHOD_GET,
         .disable_auto_redirect = true,
         .event_handler = http_event_handler,
