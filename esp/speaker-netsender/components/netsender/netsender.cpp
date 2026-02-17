@@ -562,7 +562,7 @@ esp_err_t Netsender::req_vars()
 
     ESP_LOGI(TAG, "vars response: %s", this->resp_buf);
     std::string vs;
-    auto resp = std::string(resp_buf);
+    const auto resp = std::string(resp_buf);
 
     err = this->parse_variable_callback(resp);
     if (err != ESP_OK) {
@@ -570,7 +570,7 @@ esp_err_t Netsender::req_vars()
         return ESP_FAIL;
     }
 
-    auto has_vs = netsender_extract_json(resp, "vs", vs);
+    const auto has_vs = netsender_extract_json(resp, "vs", vs);
     if (has_vs) {
         ESP_LOGD(TAG, "got varsum: %s", vs.c_str());
         // Update varsum with new varsum.
