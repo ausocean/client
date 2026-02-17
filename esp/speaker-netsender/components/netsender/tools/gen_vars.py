@@ -73,6 +73,9 @@ def generate_header(json_path: str, output_path: str) -> None:
         # Namespace the header file.
         f.write("namespace netsender {\n\n")
 
+        # Export ICD version.
+        f.write(f'const constexpr auto ICD_VERSION = "{latest_version}";\n\n')
+
         # Generate enums.
         f.write("enum var_type_t {\n")
         for i, type in enumerate(ENUM_TYPE_MAP):
@@ -82,7 +85,7 @@ def generate_header(json_path: str, output_path: str) -> None:
         f.write(f"constexpr const auto VAR_COUNT = {var_count};\n\n")
 
         # Generate an Enum for ID-based access.
-        f.write("namespace netsender_var {\n")
+        f.write("namespace var {\n")
         for var in vars:
             f.write(
                 f'constexpr const auto VAR_ID_{var["name"].upper()} = "{var["name"]}";\n'
@@ -92,7 +95,7 @@ def generate_header(json_path: str, output_path: str) -> None:
         # Create an array to iterate through.
         f.write("constexpr const auto VARIABLES = std::array{\n")
         for var in vars:
-            f.write(f"netsender_var::VAR_ID_{var['name'].upper()},\n")
+            f.write(f"var::VAR_ID_{var['name'].upper()},\n")
         f.write("};\n\n")
 
         # Generate the State Struct to hold the variables.
@@ -106,23 +109,33 @@ def generate_header(json_path: str, output_path: str) -> None:
         f.write("};\n")
 
         # Add a helper function to parse the variables into the struct.
-        f.write("""
-            inline void update_state_member(device_var_state_t& state, int var_index, const std::string& val) {
-            switch (var_index) {
-            """)
-        for i, var in enumerate(vars):
-            f.write(f"case {i}:\n")
-            match var["type"]:
-                case VarType.BYTE:
-                    f.write(
-                        f"state.{var['name']} = static_cast<char>(std::stoi(val));\n"
-                    )
-                case VarType.STRING:
-                    f.write(
-                        f"strncpy(state.{var['name']}, val.c_str(), sizeof(state.{var['name']}) - 1);\n"
-                    )
-            f.write("break;\n")
-        f.write("};\n};\n")
+        f.write(
+            "inline void update_state_member(device_var_state_t& state, const std::string& var_id, const std::string& val) {"
+        )
+
+        first = True
+        for var in vars:
+            prefix = "if" if first else "} else if"
+            var_name_upper = var["name"].upper()
+
+            f.write(f"{prefix} (var_id == var::VAR_ID_{var_name_upper}) {{\n")
+
+            if var["type"] == VarType.BYTE:
+                f.write(f"state.{var['name']} = static_cast<char>(std::stoi(val));\n")
+            elif var["type"] == VarType.STRING:
+                # Using strncpy and ensuring the last byte is always null for safety
+                f.write(
+                    f"strncpy(state.{var['name']}, val.c_str(), sizeof(state.{var['name']}) - 1);\n"
+                )
+                f.write(
+                    f"state.{var['name']}[sizeof(state.{var['name']}) - 1] = '\\0';\n"
+                )
+            first = False
+
+        if not first:
+            f.write("}\n")  # Close the last if/else block
+
+        f.write("}\n")
 
         f.write("} // namespace netsender\n")
 

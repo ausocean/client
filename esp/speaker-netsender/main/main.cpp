@@ -103,6 +103,7 @@ static void eth_event_handler(void *, esp_event_base_t, int32_t event_id, void *
     default:
         break;
     }
+
 }
 
 // Event handler for IP_EVENT_ETH_GOT_IP.
@@ -281,11 +282,11 @@ esp_err_t parse_vars(std::string var_resp)
     std::string val;
     bool has_val;
     for (auto i = 0; i < netsender::VAR_COUNT; i++) {
-        auto var_name = id + "." + netsender::VARIABLES[i];
+        std::string var_name = id + "." + netsender::VARIABLES[i];
         ESP_LOGI(TAG, "looking for variable: %s", var_name.c_str());
         has_val = netsender_extract_json(var_resp, var_name.c_str(), val);
         if (has_val) {
-            netsender::update_state_member(vars, i, val);
+            netsender::update_state_member(vars, var_name, val);
             ESP_LOGI(TAG, "got variable: %s=%s", var_name.c_str(), val.c_str());
         }
     }

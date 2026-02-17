@@ -3,9 +3,11 @@
 #include <string>
 #include <cstring>
 
-// Generated for esp-speaker v0.0.1
+// Generated for esp-speaker v1
 
 namespace netsender {
+
+const constexpr auto ICD_VERSION = "v1";
 
 enum var_type_t {
     BYTE = 0,
@@ -14,14 +16,14 @@ enum var_type_t {
 
 constexpr const auto VAR_COUNT = 2;
 
-namespace netsender_var {
+namespace var {
 constexpr const auto VAR_ID_VOLUME = "Volume";
 constexpr const auto VAR_ID_FILEPATH = "FilePath";
 }
 
 constexpr const auto VARIABLES = std::array{
-    netsender_var::VAR_ID_VOLUME,
-    netsender_var::VAR_ID_FILEPATH,
+    var::VAR_ID_VOLUME,
+    var::VAR_ID_FILEPATH,
 };
 
 struct device_var_state_t {
@@ -29,15 +31,13 @@ struct device_var_state_t {
     char FilePath[64];
 };
 
-inline void update_state_member(device_var_state_t &state, int var_index, const std::string& val)
+inline void update_state_member(device_var_state_t &state, const std::string& var_id, const std::string& val)
 {
-    switch (var_index) {
-    case 0:
+    if (var_id == var::VAR_ID_VOLUME) {
         state.Volume = static_cast<char>(std::stoi(val));
-        break;
-    case 1:
+    } else if (var_id == var::VAR_ID_FILEPATH) {
         strncpy(state.FilePath, val.c_str(), sizeof(state.FilePath) - 1);
-        break;
-    };
-};
+        state.FilePath[sizeof(state.FilePath) - 1] = '\0';
+    }
+}
 } // namespace netsender
