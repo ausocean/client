@@ -60,7 +60,7 @@ extern "C" {
 #include <sys/stat.h>
 #include "esp_vfs_fat.h"
 
-constexpr const char* SPEAKER_VERSION = "0.0.1";
+constexpr const char* SPEAKER_VERSION = "0.0.2";
 
 // Mount point for the SD card filesystem.
 static constexpr const char* MOUNT_POINT = "/sdcard";
@@ -286,13 +286,37 @@ esp_err_t parse_vars(std::string var_resp)
         ESP_LOGI(TAG, "looking for variable: %s", var_name.c_str());
         has_val = netsender_extract_json(var_resp, var_name.c_str(), val);
         if (has_val) {
-            netsender::update_state_member(vars, var_name, val);
+            netsender::update_state_member(vars, netsender::VARIABLES[i], val);
             ESP_LOGI(TAG, "got variable: %s=%s", var_name.c_str(), val.c_str());
         }
     }
 
 
     return ESP_OK;
+}
+
+// Audio loop to be run in FreeRTOS task.
+void audio_task(void *pvParameters)
+{
+    constexpr const auto AUDIO_TAG = "AUDIO";
+    auto *amp = static_cast<TAS5805*>(pvParameters);
+    if (amp == nullptr) {
+        ESP_LOGE(AUDIO_TAG, "Received null pointer!");
+        vTaskDelete(NULL);
+        return;
+    }
+    char file_path[64];
+    snprintf(file_path, sizeof(file_path), "%s/%s", MOUNT_POINT, AUDIO_FILE);
+
+    while (true) {
+        ESP_LOGI(AUDIO_TAG, "Starting playback...");
+
+        auto err = amp->play(file_path); // This blocks until the file ends
+        if (err != ESP_OK) {
+            ESP_LOGE(AUDIO_TAG, "Playback error, retrying in 1s...");
+            vTaskDelay(pdMS_TO_TICKS(1000));
+        }
+    }
 }
 
 void app_main(void)
@@ -311,19 +335,18 @@ void app_main(void)
     auto amp = init_amp();
     ESP_LOGI(TAG, "Amp Initialised");
 
-    // Construct the full path: /sdcard/audio.wav
-    char file_path[64];
-    snprintf(file_path, sizeof(file_path), "%s/%s", MOUNT_POINT, AUDIO_FILE);
-
-    // Play audio.
-    auto err = amp.play(file_path);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "failed to play audio");
-    }
+    // Start the Audio Task.
+    xTaskCreatePinnedToCore(audio_task, "audio_task", 4096, &amp, 5, NULL, 1);
 
     // Register callback function to parse variables.
     ns.register_variable_parser(parse_vars);
 
     // Start the netsender task.
     ns.start();
+
+    while (true) {
+        amp.set_volume(vars.Volume);
+
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
 }
