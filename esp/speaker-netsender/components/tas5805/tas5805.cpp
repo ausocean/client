@@ -119,13 +119,20 @@ TAS5805::TAS5805(i2c_master_bus_handle_t i2c_bus_handle,
     vTaskDelay(pdMS_TO_TICKS(10));
 }
 
-esp_err_t TAS5805::play(const char *path)
+esp_err_t TAS5805::play(const char *path, volatile bool* kill_request)
 {
     // Ensure a valid I2S handle exists to send audio.
     if (tx_handle == NULL || *tx_handle == NULL) {
         ESP_LOGE(TAG, "tx_handle must be not-NULL to play audio");
         return ESP_FAIL;
     }
+
+    // Put the device into play state.
+    uint8_t cmd = 0x00;
+    write_reg(TAS8505_CHANGE_PAGE_REG, &cmd); // Go to page 0.
+    write_reg(TAS8505_CHANGE_BOOK_REG, &cmd); // Go to book 0.
+    cmd = 0x03;
+    write_reg(TAS8505_DEVICE_CTRL_2_REG, &cmd);
 
     FILE *f = fopen(path, "rb");
     if (!f) {
@@ -146,6 +153,8 @@ esp_err_t TAS5805::play(const char *path)
     // Read WAV header.
     wav_header_t header;
     if (fread(&header, sizeof(wav_header_t), 1, f) != 1) {
+        fclose(f);
+        free(fs_buf);
         return ESP_FAIL;
     }
 
@@ -169,6 +178,9 @@ esp_err_t TAS5805::play(const char *path)
         if (i2s_buf) {
             free(i2s_buf);
         }
+
+        fclose(f);
+        free(fs_buf);
         return ESP_FAIL;
     }
 
@@ -195,6 +207,11 @@ esp_err_t TAS5805::play(const char *path)
         // Write audio to the amplifier.
         i2s_channel_write(*tx_handle, i2s_buf, samples_read * 2 * sizeof(int16_t),
                           &bytes_written, portMAX_DELAY);
+
+        if (kill_request && *kill_request) {
+            ESP_LOGI("AUDIO", "Kill request received, stopping playback.");
+            break;
+        }
     }
 
     // Push final silence to clear the amp's pipeline.
@@ -209,6 +226,20 @@ esp_err_t TAS5805::play(const char *path)
     if (fs_buf) {
         free(fs_buf);
     }
+
+    return ESP_OK;
+}
+
+esp_err_t TAS5805::pause()
+{
+    uint8_t cmd = 0x00;
+    write_reg(TAS8505_CHANGE_PAGE_REG, &cmd); // Go to page 0.
+    write_reg(TAS8505_CHANGE_BOOK_REG, &cmd); // Go to book 0.
+
+
+    // Set device to sleep.
+    cmd = 0x01;
+    write_reg(TAS8505_DEVICE_CTRL_2_REG, &cmd);
 
     return ESP_OK;
 }
