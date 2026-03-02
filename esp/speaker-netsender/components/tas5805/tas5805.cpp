@@ -151,6 +151,8 @@ esp_err_t TAS5805::play(const char *path)
     // Read WAV header.
     wav_header_t header;
     if (fread(&header, sizeof(wav_header_t), 1, f) != 1) {
+        fclose(f);
+        free(fs_buf);
         return ESP_FAIL;
     }
 
@@ -174,6 +176,9 @@ esp_err_t TAS5805::play(const char *path)
         if (i2s_buf) {
             free(i2s_buf);
         }
+
+        fclose(f);
+        free(fs_buf);
         return ESP_FAIL;
     }
 
