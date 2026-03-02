@@ -61,13 +61,10 @@ extern "C" {
 #include <sys/stat.h>
 #include "esp_vfs_fat.h"
 
-constexpr const char* SPEAKER_VERSION = "0.1.0";
+constexpr const char* SPEAKER_VERSION = "0.2.0";
 
 // Mount point for the SD card filesystem.
-static constexpr const char* MOUNT_POINT = "/sdcard";
-
-// Filepath for the audio file.
-static constexpr const char* AUDIO_FILE = "audio.wav";
+const char* MOUNT_POINT = "/sdcard";
 
 // Tag used in logs.
 static constexpr const char* TAG = "speaker";
@@ -76,7 +73,10 @@ static constexpr const char* TAG = "speaker";
 static Netsender ns;
 
 // Device variables.
-static netsender::device_var_state_t vars;
+netsender::device_var_state_t vars;
+
+// Handle for the audio player task.
+static TaskHandle_t player_handle;
 
 // Atomic flag for stopping audio playback.
 // TODO: Use a better threadsafe option.
@@ -310,10 +310,17 @@ void audio_task(void *pvParameters)
         vTaskDelete(NULL);
         return;
     }
-    char file_path[64];
-    snprintf(file_path, sizeof(file_path), "%s/%s", MOUNT_POINT, AUDIO_FILE);
+
+    // Start by pausing the audio to ensure the I2S buffer is empty
+    amp->pause();
+
+    // This will always be the same length.
+    char filename[HASH_FILENAME_LEN];
+    char file_path[512];
 
     while (true) {
+        url_to_filename(vars.FilePath, filename);
+        snprintf(file_path, sizeof(file_path), "%s/%s", MOUNT_POINT, filename);
         while (reload_requested) {
             vTaskDelay(pdMS_TO_TICKS(1000));
             ESP_LOGI(AUDIO_TAG, "waiting for reload to complete");
@@ -346,7 +353,7 @@ void app_main(void)
     ESP_LOGI(TAG, "Amp Initialised");
 
     // Start the Audio Task.
-    xTaskCreatePinnedToCore(audio_task, "audio_task", 4096, &amp, 5, NULL, 1);
+    xTaskCreatePinnedToCore(audio_task, "audio_task", 4096, &amp, 5, &player_handle, 1);
 
     // Register callback function to parse variables.
     ns.register_variable_parser(parse_vars);
@@ -354,8 +361,24 @@ void app_main(void)
     // Start the netsender task.
     ns.start();
 
+    char cur_audio_file[512];
+    strncpy(cur_audio_file, vars.FilePath, 64);
+
     while (true) {
         amp.set_volume(vars.Volume);
+
+        if (strcmp(cur_audio_file, vars.FilePath) != 0) {
+            ESP_LOGI(TAG, "audio file variable has changed, loading new audio");
+            reload_requested = true;
+            auto err = download_file_to_sdcard();
+            if (err == ESP_OK) {
+                reload_requested = false;
+            } else {
+                ESP_LOGE(TAG, "couldn't load new file, continuing with old file");
+            }
+            strncpy(cur_audio_file, vars.FilePath, strlen(vars.FilePath));
+            amp.pause();
+        }
 
         vTaskDelay(pdMS_TO_TICKS(1000));
     }

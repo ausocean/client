@@ -28,7 +28,7 @@ constexpr const auto VARIABLES = std::array{
 
 struct device_var_state_t {
     char Volume;
-    char FilePath[64];
+    char FilePath[512];
 };
 
 inline void update_state_member(device_var_state_t &state, const std::string& var_id, const std::string& val)
