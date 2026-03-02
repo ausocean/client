@@ -33,6 +33,7 @@ extern "C" {
 #include "freertos/projdefs.h"
 #include "netsender.hpp"
 #include "include/netsender_vars.hpp"
+#include "include/audio.hpp"
 #include "soc/clk_tree_defs.h"
 #include "driver/i2s_types.h"
 #include "esp_err.h"
@@ -76,6 +77,10 @@ static Netsender ns;
 
 // Device variables.
 static netsender::device_var_state_t vars;
+
+// Atomic flag for stopping audio playback.
+// TODO: Use a better threadsafe option.
+volatile bool reload_requested = false;
 
 // Event handler for Ethernet events.
 static void eth_event_handler(void *, esp_event_base_t, int32_t event_id, void *event_data)
@@ -309,9 +314,14 @@ void audio_task(void *pvParameters)
     snprintf(file_path, sizeof(file_path), "%s/%s", MOUNT_POINT, AUDIO_FILE);
 
     while (true) {
+        while (reload_requested) {
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            ESP_LOGI(AUDIO_TAG, "waiting for reload to complete");
+        }
         ESP_LOGI(AUDIO_TAG, "Starting playback...");
 
-        auto err = amp->play(file_path); // This blocks until the file ends
+        // This will block until the file ends, or reload requested is set to true.
+        auto err = amp->play(file_path, &reload_requested);
         if (err != ESP_OK) {
             ESP_LOGE(AUDIO_TAG, "Playback error, retrying in 1s...");
             vTaskDelay(pdMS_TO_TICKS(1000));

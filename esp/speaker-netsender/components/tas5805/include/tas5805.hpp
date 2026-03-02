@@ -53,7 +53,12 @@ public:
      * @brief Reads PCM data from a file and writes it to the I2S DMA buffer.
      * @param f Pointer to the opened audio file
      */
-    esp_err_t play(const char* path);
+    esp_err_t play(const char* path, volatile bool* kill_request);
+
+    /**
+     * @brief Pauses playback of the amp.
+     */
+    esp_err_t pause();
 
     /**
      * @brief sets the digital volume
