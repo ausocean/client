@@ -61,7 +61,7 @@ extern "C" {
 #include <sys/stat.h>
 #include "esp_vfs_fat.h"
 
-constexpr const char* SPEAKER_VERSION = "0.2.0";
+constexpr const char* SPEAKER_VERSION = "0.2.1";
 
 // Mount point for the SD card filesystem.
 const char* MOUNT_POINT = "/sdcard";
@@ -316,7 +316,7 @@ void audio_task(void *pvParameters)
 
     // This will always be the same length.
     char filename[HASH_FILENAME_LEN];
-    char file_path[512];
+    char file_path[netsender::MAX_STR_VAR_LEN];
 
     while (true) {
         url_to_filename(vars.FilePath, filename);
@@ -361,7 +361,7 @@ void app_main(void)
     // Start the netsender task.
     ns.start();
 
-    char cur_audio_file[512];
+    char cur_audio_file[netsender::MAX_STR_VAR_LEN];
     strncpy(cur_audio_file, vars.FilePath, 64);
 
     while (true) {
