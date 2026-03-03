@@ -296,6 +296,18 @@ esp_err_t parse_vars(std::string var_resp)
         }
     }
 
+    // Save the variables to the SD card.
+    constexpr const auto MAX_VAR_PATH_LEN = 64;
+    char var_file[MAX_VAR_PATH_LEN];
+    snprintf(var_file, MAX_VAR_PATH_LEN, "%s/%s", MOUNT_POINT, VARS_FILE);
+
+    auto err = netsender::write_vars_to_file(vars, var_file);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "failed to write the vars to file");
+        // We don't return an error as this shouldn't affect runtime flow.
+    } else {
+        ESP_LOGI(TAG, "wrote vars to file");
+    }
 
     return ESP_OK;
 }
