@@ -60,7 +60,7 @@ extern "C" {
 #include <sys/stat.h>
 #include "esp_vfs_fat.h"
 
-constexpr const char* SPEAKER_VERSION = "0.0.2";
+constexpr const char* SPEAKER_VERSION = "0.1.0";
 
 // Mount point for the SD card filesystem.
 static constexpr const char* MOUNT_POINT = "/sdcard";

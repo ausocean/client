@@ -41,6 +41,8 @@
 
 static const char *TAG = "tas5805";
 
+static constexpr const auto DEFAULT_VOLUME = 80;
+
 typedef struct {
     char chunk_id[4]; // "RIFF"
     uint32_t chunk_size;
@@ -102,7 +104,7 @@ TAS5805::TAS5805(i2c_master_bus_handle_t i2c_bus_handle,
     write_reg(TAS8505_AGAIN_REG, &cmd);
 
     // Set device digital volume.
-    this->set_volume(80);
+    this->set_volume(DEFAULT_VOLUME);
 
     /* Set device settings (2) - offset: 03h
         Bits:
