@@ -30,6 +30,7 @@
 #include "driver/i2s_std.h"
 #include <cstdint>
 #include <stdio.h>
+#include <type_traits>
 
 constexpr auto TAS8505_CHANGE_PAGE_REG   = 0x00;
 constexpr auto TAS8505_CHANGE_BOOK_REG   = 0x7F;
@@ -79,9 +80,21 @@ private:
      *
      * @param reg number of the register to be written.
      * @param data data to be written to the register.
-     * @param len length of the data to write.
      */
-    void write_reg(const int reg, const uint8_t* data);
+    void write_reg(const int reg, const uint8_t data);
+
+    /**
+     * @brief Write enum values to the given register.
+     *
+     * @param reg number of the register to be written.
+     * @param cmds variadic list of uint8_t command enums.
+     */
+    template <typename ...Cmds>
+    requires
+    (std::is_enum_v<Cmds> && ...) &&
+    ((sizeof(Cmds) == 1) && ...) &&
+    (sizeof...(Cmds) > 0)
+    void write_reg(const int reg, const Cmds... cmds);
 
     /** I2C master handles */
     i2c_master_bus_handle_t bus_handle;

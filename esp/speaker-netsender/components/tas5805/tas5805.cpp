@@ -75,27 +75,20 @@ TAS5805::TAS5805(i2c_master_bus_handle_t i2c_bus_handle,
     ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &dev_cfg, &dev_handle));
 
     // Configure default settings for the amplifier.
-    auto cmd = +PAGE::ZERO;
-    write_reg(TAS8505_CHANGE_PAGE_REG, &cmd); // Go to page 0.
-    cmd = +BOOK::ZERO;
-    write_reg(TAS8505_CHANGE_BOOK_REG, &cmd); // Go to book 0.
+    write_reg(TAS8505_CHANGE_PAGE_REG, PAGE::ZERO); // Go to page 0.
+    write_reg(TAS8505_CHANGE_BOOK_REG, BOOK::ZERO); // Go to book 0.
 
     // Set device to Hi-Z state before configuration.
-    cmd = +CTRL_STATE::HI_Z;
-    write_reg(TAS8505_DEVICE_CTRL_2_REG, &cmd);
+    write_reg(TAS8505_DEVICE_CTRL_2_REG, CTRL_STATE::HI_Z);
 
-    cmd = +DAMP_PBTL::PBTL_MODE;
-    write_reg(TAS8505_DEVICE_CTRL_1_REG, &cmd);
-
-    cmd = +ANA_GAIN::DB_0;
-    write_reg(TAS8505_AGAIN_REG, &cmd);
+    write_reg(TAS8505_DEVICE_CTRL_1_REG, DAMP_PBTL::PBTL_MODE); // Set PBTL MODE.
+    write_reg(TAS8505_AGAIN_REG, ANA_GAIN::DB_0); // Set Analog gain = 0dB.
 
     // Set device digital volume.
     this->set_volume(DEFAULT_VOLUME);
 
     // Set back to play mode.
-    cmd = +CTRL_STATE::PLAY;
-    write_reg(TAS8505_DEVICE_CTRL_2_REG, &cmd);
+    write_reg(TAS8505_DEVICE_CTRL_2_REG, CTRL_STATE::PLAY);
 
     vTaskDelay(pdMS_TO_TICKS(10));
 }
@@ -109,12 +102,9 @@ esp_err_t TAS5805::play(const char *path, volatile bool* kill_request)
     }
 
     // Put the device into play state.
-    auto cmd = +PAGE::ZERO;
-    write_reg(TAS8505_CHANGE_PAGE_REG, &cmd); // Go to page 0.
-    cmd = +BOOK::ZERO;
-    write_reg(TAS8505_CHANGE_BOOK_REG, &cmd); // Go to book 0.
-    cmd = +CTRL_STATE::PLAY;
-    write_reg(TAS8505_DEVICE_CTRL_2_REG, &cmd);
+    write_reg(TAS8505_CHANGE_PAGE_REG, PAGE::ZERO); // Go to page 0.
+    write_reg(TAS8505_CHANGE_BOOK_REG, BOOK::ZERO); // Go to book 0.
+    write_reg(TAS8505_DEVICE_CTRL_2_REG, CTRL_STATE::PLAY);
 
     FILE *f = fopen(path, "rb");
     if (!f) {
@@ -214,24 +204,19 @@ esp_err_t TAS5805::play(const char *path, volatile bool* kill_request)
 
 esp_err_t TAS5805::pause()
 {
-    auto cmd = +PAGE::ZERO;
-    write_reg(TAS8505_CHANGE_PAGE_REG, &cmd); // Go to page 0.
-    cmd = +BOOK::ZERO;
-    write_reg(TAS8505_CHANGE_BOOK_REG, &cmd); // Go to book 0.
+    write_reg(TAS8505_CHANGE_PAGE_REG, PAGE::ZERO); // Go to page 0.
+    write_reg(TAS8505_CHANGE_BOOK_REG, BOOK::ZERO); // Go to book 0.
 
     // Set device to sleep.
-    cmd = +CTRL_STATE::SLEEP;
-    write_reg(TAS8505_DEVICE_CTRL_2_REG, &cmd);
+    write_reg(TAS8505_DEVICE_CTRL_2_REG, CTRL_STATE::SLEEP);
 
     return ESP_OK;
 }
 
 esp_err_t TAS5805::set_volume(uint8_t vol)
 {
-    auto cmd = +PAGE::ZERO;
-    write_reg(TAS8505_CHANGE_PAGE_REG, &cmd); // Go to page 0.
-    cmd = +BOOK::ZERO;
-    write_reg(TAS8505_CHANGE_BOOK_REG, &cmd); // Go to book 0.
+    write_reg(TAS8505_CHANGE_PAGE_REG, PAGE::ZERO); // Go to page 0.
+    write_reg(TAS8505_CHANGE_BOOK_REG, BOOK::ZERO); // Go to book 0.
 
     // Bound volume.
     if (vol < 0) {
@@ -242,23 +227,34 @@ esp_err_t TAS5805::set_volume(uint8_t vol)
 
     // Scale and invert volume from 0-100 to 255-0.
     // TODO: Make this a more linear sounding scale.
-    cmd = 255 - ((uint16_t)vol * 255 / 100);
+    uint8_t cmd = 255 - ((uint16_t)vol * 255 / 100);
 
     // Write the new volume set point.
-    write_reg(TAS8505_DIG_VOL_CTRL_REG, &cmd);
+    write_reg(TAS8505_DIG_VOL_CTRL_REG, cmd);
 
     return ESP_OK;
 }
 
-void TAS5805::write_reg(const int reg, const uint8_t *cmd)
+void TAS5805::write_reg(const int reg, const uint8_t cmd)
 {
     ESP_LOGD(TAG, "Writing to Register: 0x%02X", reg);
 
     // Put the register first, and then the data.
-    uint8_t data[] = {static_cast<uint8_t>(reg), *cmd};
+    uint8_t data[] = {static_cast<uint8_t>(reg), cmd};
 
     // Transmit the command.
     ESP_ERROR_CHECK(i2c_master_transmit(dev_handle, data, 2, 50));
+}
+
+template <typename ...Cmd>
+requires
+(std::is_enum_v<Cmd> && ...) &&
+((sizeof(Cmd) == 1) && ...) &&
+(sizeof...(Cmd) > 0)
+void TAS5805::write_reg(const int reg, const Cmd... cmds)
+{
+    const uint8_t cmd = (static_cast<uint8_t>(cmds) | ...);
+    write_reg(reg, cmd);
 }
 
 TAS5805::~TAS5805()

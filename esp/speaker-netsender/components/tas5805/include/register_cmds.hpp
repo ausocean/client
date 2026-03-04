@@ -27,14 +27,7 @@
 #pragma once
 
 #include <stdint.h>
-#include <type_traits>
-
-template <typename T>
-requires std::is_enum_v<T>
-constexpr auto operator+(T e)
-{
-    return static_cast<std::underlying_type_t<T>>(e);
-}
+#include "tas5805.hpp"
 
 enum class PAGE : uint8_t {
     ZERO = 0x00,
