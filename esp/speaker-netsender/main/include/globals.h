@@ -31,4 +31,8 @@
 // Mount point for the SD card filesystem.
 inline const constexpr auto MOUNT_POINT = "/sdcard";
 
+// Atomic flag for stopping audio playback.
+// TODO: Use a better threadsafe option.
+inline volatile bool reload_requested = false;
+
 extern netsender::device_var_state_t vars;
