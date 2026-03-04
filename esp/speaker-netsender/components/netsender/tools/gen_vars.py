@@ -76,6 +76,9 @@ def generate_header(json_path: str, output_path: str) -> None:
         # Export ICD version.
         f.write(f'const constexpr auto ICD_VERSION = "{latest_version}";\n\n')
 
+        # Export max string variable length.
+        f.write(f"const constexpr auto MAX_STR_VAR_LEN = 512;\n\n")
+
         # Generate enums.
         f.write("enum var_type_t {\n")
         for i, type in enumerate(ENUM_TYPE_MAP):
@@ -103,10 +106,10 @@ def generate_header(json_path: str, output_path: str) -> None:
         for var in vars:
             c_type: str = C_TYPE_MAP.get(var["type"], "void*")
             if var["type"] == VarType.STRING:
-                f.write(f"    char {var['name']}[64];\n")
+                f.write(f"    char {var['name']}[MAX_STR_VAR_LEN];\n")
             else:
                 f.write(f"    {c_type} {var['name']};\n")
-        f.write("};\n")
+        f.write("};\n\n")
 
         # Add a helper function to parse the variables into the struct.
         f.write(

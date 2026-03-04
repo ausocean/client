@@ -9,6 +9,8 @@ namespace netsender {
 
 const constexpr auto ICD_VERSION = "v1";
 
+const constexpr auto MAX_STR_VAR_LEN = 512;
+
 enum var_type_t {
     BYTE = 0,
     STRING = 1,
@@ -28,7 +30,7 @@ constexpr const auto VARIABLES = std::array{
 
 struct device_var_state_t {
     char Volume;
-    char FilePath[512];
+    char FilePath[MAX_STR_VAR_LEN];
 };
 
 inline void update_state_member(device_var_state_t &state, const std::string& var_id, const std::string& val)
