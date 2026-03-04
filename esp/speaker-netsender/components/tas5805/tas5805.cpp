@@ -41,6 +41,8 @@
 
 static const char *TAG = "tas5805";
 
+static constexpr const auto DEFAULT_VOLUME = 80;
+
 typedef struct {
     char chunk_id[4]; // "RIFF"
     uint32_t chunk_size;
@@ -101,13 +103,8 @@ TAS5805::TAS5805(i2c_master_bus_handle_t i2c_bus_handle,
     cmd = 0x00;
     write_reg(TAS8505_AGAIN_REG, &cmd);
 
-    /* Set device digital volume - offset: 4Ch
-        Bits:
-          7-0:  00100000   - ~30% Volume
-          = 0b0010 0000 = 0x20
-    */
-    cmd = 0x30;
-    write_reg(TAS8505_DIG_VOL_CTRL_REG, &cmd);
+    // Set device digital volume.
+    this->set_volume(DEFAULT_VOLUME);
 
     /* Set device settings (2) - offset: 03h
         Bits:
@@ -223,6 +220,28 @@ esp_err_t TAS5805::play(const char *path)
     return ESP_OK;
 }
 
+esp_err_t TAS5805::set_volume(uint8_t vol)
+{
+    uint8_t cmd = 0x00;
+    write_reg(TAS8505_CHANGE_PAGE_REG, &cmd); // Go to page 0.
+    write_reg(TAS8505_CHANGE_BOOK_REG, &cmd); // Go to book 0.
+
+    // Bound volume.
+    if (vol < 0) {
+        vol = 0;
+    } else if (vol > 100) {
+        vol = 100;
+    }
+
+    // Scale and invert volume from 0-100 to 255-0.
+    // TODO: Make this a more linear sounding scale.
+    cmd = 255 - ((uint16_t)vol * 255 / 100);
+
+    // Write the new volume set point.
+    write_reg(TAS8505_DIG_VOL_CTRL_REG, &cmd);
+
+    return ESP_OK;
+}
 
 void TAS5805::write_reg(const int reg, const uint8_t *cmd)
 {

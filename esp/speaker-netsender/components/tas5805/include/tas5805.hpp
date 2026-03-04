@@ -26,6 +26,7 @@
 
 #include "driver/i2c_master.h"
 #include "driver/i2s_std.h"
+#include <cstdint>
 #include <stdio.h>
 
 constexpr auto TAS8505_CHANGE_PAGE_REG   = 0x00;
@@ -53,6 +54,12 @@ public:
      * @param f Pointer to the opened audio file
      */
     esp_err_t play(const char* path);
+
+    /**
+     * @brief sets the digital volume
+     * @param vol volume to set the speaker at (0-100).
+     */
+    esp_err_t set_volume(uint8_t vol);
 
     /**
      * @brief destructor.
