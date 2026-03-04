@@ -28,6 +28,7 @@
 */
 
 #include "tas5805.hpp"
+#include "register_cmds.hpp"
 #include "driver/i2c_master.h"
 #include "driver/i2s_common.h"
 #include "esp_err.h"
@@ -74,48 +75,26 @@ TAS5805::TAS5805(i2c_master_bus_handle_t i2c_bus_handle,
     ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &dev_cfg, &dev_handle));
 
     // Configure default settings for the amplifier.
-    uint8_t cmd = 0x00;
+    auto cmd = +PAGE::ZERO;
     write_reg(TAS8505_CHANGE_PAGE_REG, &cmd); // Go to page 0.
+    cmd = +BOOK::ZERO;
     write_reg(TAS8505_CHANGE_BOOK_REG, &cmd); // Go to book 0.
 
     // Set device to Hi-Z state before configuration.
-    cmd = 0x02;
+    cmd = +CTRL_STATE::HI_Z;
     write_reg(TAS8505_DEVICE_CTRL_2_REG, &cmd);
 
-    /* Set device settings (1) - offset: 02h
-        Bits:
-          7:    0   - Reserved
-          6-4:  000 - 768K (FSW_SEL)
-          3:    0   - Reserved
-          2:    1   - PBTL Mode (DAMP_PBTL)
-          1-0:  00  - BD Modulation (DAMP_MOD)
-          = 0b0000 0100 = 0x04
-    */
-    cmd = 0x04;
+    cmd = +DAMP_PBTL::PBTL_MODE;
     write_reg(TAS8505_DEVICE_CTRL_1_REG, &cmd);
 
-    /* Set device analog gain - offset: 54h
-        Bits:
-          7-5:  000   - Reserved
-          4-0:  00000 - 0dB (Max Vol) (ANA_GAIN)
-          = 0b0000 0000 = 0x00
-    */
-    cmd = 0x00;
+    cmd = +ANA_GAIN::DB_0;
     write_reg(TAS8505_AGAIN_REG, &cmd);
 
     // Set device digital volume.
     this->set_volume(DEFAULT_VOLUME);
 
-    /* Set device settings (2) - offset: 03h
-        Bits:
-          7-5:  000 - Reserved
-          4:    0   - Don't reset DSP (DIS_DSP)
-          3:    0   - Normal Volume (MUTE)
-          2:    0   - Reserved
-          1-0:  11  - Play (CTRL_STATE)
-          = 0b0000 0011 = 0x03
-    */
-    cmd = 0x03;
+    // Set back to play mode.
+    cmd = +CTRL_STATE::PLAY;
     write_reg(TAS8505_DEVICE_CTRL_2_REG, &cmd);
 
     vTaskDelay(pdMS_TO_TICKS(10));
@@ -130,10 +109,11 @@ esp_err_t TAS5805::play(const char *path, volatile bool* kill_request)
     }
 
     // Put the device into play state.
-    uint8_t cmd = 0x00;
+    auto cmd = +PAGE::ZERO;
     write_reg(TAS8505_CHANGE_PAGE_REG, &cmd); // Go to page 0.
+    cmd = +BOOK::ZERO;
     write_reg(TAS8505_CHANGE_BOOK_REG, &cmd); // Go to book 0.
-    cmd = 0x03;
+    cmd = +CTRL_STATE::PLAY;
     write_reg(TAS8505_DEVICE_CTRL_2_REG, &cmd);
 
     FILE *f = fopen(path, "rb");
@@ -234,13 +214,13 @@ esp_err_t TAS5805::play(const char *path, volatile bool* kill_request)
 
 esp_err_t TAS5805::pause()
 {
-    uint8_t cmd = 0x00;
+    auto cmd = +PAGE::ZERO;
     write_reg(TAS8505_CHANGE_PAGE_REG, &cmd); // Go to page 0.
+    cmd = +BOOK::ZERO;
     write_reg(TAS8505_CHANGE_BOOK_REG, &cmd); // Go to book 0.
 
-
     // Set device to sleep.
-    cmd = 0x01;
+    cmd = +CTRL_STATE::SLEEP;
     write_reg(TAS8505_DEVICE_CTRL_2_REG, &cmd);
 
     return ESP_OK;
@@ -248,8 +228,9 @@ esp_err_t TAS5805::pause()
 
 esp_err_t TAS5805::set_volume(uint8_t vol)
 {
-    uint8_t cmd = 0x00;
+    auto cmd = +PAGE::ZERO;
     write_reg(TAS8505_CHANGE_PAGE_REG, &cmd); // Go to page 0.
+    cmd = +BOOK::ZERO;
     write_reg(TAS8505_CHANGE_BOOK_REG, &cmd); // Go to book 0.
 
     // Bound volume.
