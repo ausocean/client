@@ -2,6 +2,7 @@
 #include <array>
 #include <string>
 #include <cstring>
+#include "esp_err.h"
 
 // Generated for esp-speaker v1
 
@@ -41,5 +42,25 @@ inline void update_state_member(device_var_state_t &state, const std::string& va
         strncpy(state.FilePath, val.c_str(), sizeof(state.FilePath) - 1);
         state.FilePath[sizeof(state.FilePath) - 1] = '\0';
     }
+}
+
+inline esp_err_t write_vars_to_file(const device_var_state_t &state, const std::string& file_path)
+{
+    FILE* fd = fopen(file_path.c_str(), "w");
+    if (fd == NULL) {
+        return ESP_FAIL;
+    }
+
+    if (fprintf(fd, "%s:%d\n", var::VAR_ID_VOLUME, (int)state.Volume) < 0) {
+        fclose(fd);
+        return ESP_FAIL;
+    }
+    if (fprintf(fd, "%s:%s\n", var::VAR_ID_FILEPATH, state.FilePath) < 0) {
+        fclose(fd);
+        return ESP_FAIL;
+    }
+
+    fclose(fd);
+    return ESP_OK;
 }
 } // namespace netsender

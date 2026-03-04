@@ -66,7 +66,7 @@ def generate_header(json_path: str, output_path: str) -> None:
     with open(output_path, "w") as f:
         # Add includes.
         f.write(
-            "#pragma once\n#include <array>\n#include <string>\n#include <cstring>\n\n"
+            '#pragma once\n#include <array>\n#include <string>\n#include <cstring>\n#include "esp_err.h"\n\n'
         )
         f.write(f"// Generated for {client_name} {latest_version}\n\n")
 
@@ -138,6 +138,29 @@ def generate_header(json_path: str, output_path: str) -> None:
         if not first:
             f.write("}\n")  # Close the last if/else block
 
+        f.write("}\n")
+
+        # Generate the automated write function
+        f.write(
+            "\ninline esp_err_t write_vars_to_file(const device_var_state_t &state, const std::string& file_path) {\n"
+        )
+        f.write('    FILE* fd = fopen(file_path.c_str(), "w");\n')
+        f.write("    if (fd == NULL) return ESP_FAIL;\n\n")
+
+        for var in vars:
+            v_name = var["name"]
+            v_id = f"var::VAR_ID_{v_name.upper()}"
+            if var["type"] == VarType.BYTE:
+                f.write(
+                    f'if (fprintf(fd, "%s:%d\\n", {v_id}, (int)state.{v_name}) < 0) {{ fclose(fd); return ESP_FAIL; }}\n'
+                )
+            elif var["type"] == VarType.STRING:
+                f.write(
+                    f'if (fprintf(fd, "%s:%s\\n", {v_id}, state.{v_name}) < 0) {{ fclose(fd); return ESP_FAIL; }}\n'
+                )
+
+        f.write("\nfclose(fd);\n")
+        f.write("return ESP_OK;\n")
         f.write("}\n")
 
         f.write("} // namespace netsender\n")
