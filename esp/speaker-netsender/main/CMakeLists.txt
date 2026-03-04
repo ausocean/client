@@ -1,4 +1,4 @@
-idf_component_register(SRCS "main.cpp" "audio.cpp" "ethernet.cpp"
+idf_component_register(SRCS "main.cpp" "audio.cpp" "ethernet.cpp" "sd.cpp"
                     INCLUDE_DIRS "." "include"
                     REQUIRES esp_driver_sdspi esp_eth esp_netif fatfs sdmmc driver tas5805 netsender)
 

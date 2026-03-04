@@ -35,6 +35,8 @@ extern "C" {
 #include "include/netsender_vars.hpp"
 #include "include/audio.hpp"
 #include "include/ethernet.hpp"
+#include "include/sd.hpp"
+#include "include/globals.h"
 #include "soc/clk_tree_defs.h"
 #include "driver/i2s_types.h"
 #include "esp_err.h"
@@ -64,8 +66,8 @@ extern "C" {
 
 constexpr const char* SPEAKER_VERSION = "0.3.0";
 
-// Mount point for the SD card filesystem.
-const char* MOUNT_POINT = "/sdcard";
+// File to save variables to.
+const constexpr char* VARS_FILE = "variables.txt";
 
 // Tag used in logs.
 static constexpr const char* TAG = "speaker";
@@ -82,47 +84,6 @@ static TaskHandle_t player_handle;
 // Atomic flag for stopping audio playback.
 // TODO: Use a better threadsafe option.
 volatile bool reload_requested = false;
-
-static auto init_sd()
-{
-    sdmmc_card_t *card;
-
-    // Use the default host.
-    sdmmc_host_t host = SDSPI_HOST_DEFAULT();
-
-    // Configure the SPI bus to use the config values.
-    spi_bus_config_t bus_cfg = {};
-    bus_cfg.mosi_io_num = (gpio_num_t)CONFIG_SD_MOSI;
-    bus_cfg.miso_io_num = (gpio_num_t)CONFIG_SD_MISO;
-    bus_cfg.sclk_io_num = (gpio_num_t)CONFIG_SD_CLK;
-    bus_cfg.quadwp_io_num = CONFIG_SD_QUADWP;
-    bus_cfg.quadhd_io_num = CONFIG_SD_QUADHD;
-    bus_cfg.max_transfer_sz = CONFIG_SD_MAX_TRANSFER_SZ;
-
-    // Initialise the SPI Bus.
-    ESP_ERROR_CHECK(spi_bus_initialize((spi_host_device_t)host.slot, &bus_cfg, SDSPI_DEFAULT_DMA));
-
-    // Configure the SD Slot.
-    sdspi_dev_handle_t sd_handle;
-    sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
-    slot_config.gpio_cs = static_cast<gpio_num_t>(CONFIG_SD_CS);
-    slot_config.gpio_cd = static_cast<gpio_num_t>(CONFIG_SD_DET);
-    slot_config.host_id = static_cast<spi_host_device_t>(host.slot);
-
-    // Initialise the device.
-    ESP_ERROR_CHECK(sdspi_host_init_device(&slot_config, &sd_handle));
-
-    // Options for mounting the filesystem.
-    esp_vfs_fat_sdmmc_mount_config_t mount_config = {};
-    mount_config.format_if_mount_failed = false;
-    mount_config.max_files = 5;
-    mount_config.allocation_unit_size = 32 * 1024;
-
-    // Mount the filesystem.
-    ESP_ERROR_CHECK(esp_vfs_fat_sdspi_mount(MOUNT_POINT, &host, &slot_config, &mount_config, &card));
-
-    return card;
-}
 
 static TAS5805 init_amp()
 {
@@ -270,7 +231,7 @@ void app_main(void)
     ESP_LOGI(TAG, "Ethernet initialised");
 
     ESP_LOGI(TAG, "Initialising SD card");
-    auto sd_card = init_sd();
+    init_sd();
     ESP_LOGI(TAG, "SD initialised");
 
     ESP_LOGI(TAG, "Initialising I2S Amp");
