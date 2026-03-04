@@ -1,6 +1,6 @@
 /*
   Name:
-    globals.h - global variables.
+    sd.hpp - Functions for managing the SD card.
 
   Authors:
     David Sutton <davidsutton@ausocean.org>
@@ -26,13 +26,9 @@
 
 #pragma once
 
-#include "include/netsender_vars.hpp"
+#include "sd_protocol_types.h"
 
-// Mount point for the SD card filesystem.
-inline const constexpr auto MOUNT_POINT = "/sdcard";
-
-// Atomic flag for stopping audio playback.
-// TODO: Use a better threadsafe option.
-inline volatile bool reload_requested = false;
-
-extern netsender::device_var_state_t vars;
+/**
+ * @brief Initialises SD card.
+ */
+void init_sd();

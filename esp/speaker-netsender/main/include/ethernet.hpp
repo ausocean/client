@@ -1,6 +1,6 @@
 /*
   Name:
-    globals.h - global variables.
+    ethernet.hpp - Ethernet functions for the ESP Speaker.
 
   Authors:
     David Sutton <davidsutton@ausocean.org>
@@ -26,13 +26,20 @@
 
 #pragma once
 
-#include "include/netsender_vars.hpp"
+#include "esp_event_base.h"
 
-// Mount point for the SD card filesystem.
-inline const constexpr auto MOUNT_POINT = "/sdcard";
+/**
+ * @brief Event handler for ethernet events.
+ */
+void eth_event_handler(void *, esp_event_base_t, int32_t event_id, void *event_data);
 
-// Atomic flag for stopping audio playback.
-// TODO: Use a better threadsafe option.
-inline volatile bool reload_requested = false;
+/**
+ * @brief Event handler for IP events.
+ */
+void got_ip_event_handler(void *, esp_event_base_t,
+                          int32_t, void *event_data);
 
-extern netsender::device_var_state_t vars;
+/**
+ * @brief Initialise ethernet MAC, PHY and TCP/IP.
+ */
+void init_ethernet();

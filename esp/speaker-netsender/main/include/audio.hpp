@@ -27,6 +27,7 @@
 #pragma once
 
 #include "esp_err.h"
+#include "tas5805.hpp"
 
 // The length of the hashed filename will always be the same
 // due to the constant length hash (64), plus the filetype ('.wav'),
@@ -45,3 +46,17 @@ void url_to_filename(const char* url, char* out_filename);
  * @brief downloads the current var.FileName to the SD card.
  */
 esp_err_t download_file_to_sdcard();
+
+/**
+ * @brief Initialise I2S system, and amplifier.
+ *
+ * @return a configured TAS5805 amplifier.
+ */
+TAS5805 init_amp();
+
+/**
+ * @brief Audio loop to be run in FreeRTOS task.
+ *
+ * @param pvParameters pointer to configured amplifier.
+ */
+void audio_task(void *pvParameters);
