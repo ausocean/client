@@ -32,6 +32,7 @@
 #include "esp_http_client.h"
 #include "esp_log.h"
 #include "esp_mac.h"
+#include <cstdint>
 #include <stdio.h>
 #include <string.h>
 #include <string>
@@ -204,6 +205,11 @@ esp_err_t Netsender::register_variable_parser(std::function<esp_err_t(std::strin
     this->parse_variable_callback = parser_func;
 
     return ESP_OK;
+}
+
+void Netsender::set_varsum(int32_t varsum)
+{
+    this->varsum = varsum;
 }
 
 void Netsender::run()
