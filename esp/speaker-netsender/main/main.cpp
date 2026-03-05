@@ -66,7 +66,7 @@ extern "C" {
 #include "esp_vfs_fat.h"
 
 // Current version of the speaker.
-static constexpr const auto SPEAKER_VERSION = "0.4.1";
+static constexpr const auto SPEAKER_VERSION = "0.4.2";
 
 // File to save variables to.
 static const constexpr auto VARS_FILE = "variables.txt";
