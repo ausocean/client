@@ -207,7 +207,7 @@ esp_err_t Netsender::register_variable_parser(std::function<esp_err_t(std::strin
     return ESP_OK;
 }
 
-void Netsender::set_varsum(int32_t varsum)
+void Netsender::set_varsum(const int32_t varsum)
 {
     this->varsum = varsum;
 }

@@ -25,6 +25,8 @@
 */
 
 // Make the app c++ compatible.
+#include <string>
+#include <string_view>
 extern "C" {
     void app_main();
 }
@@ -99,9 +101,15 @@ esp_err_t parse_vars(std::string var_resp)
 
     // Parse the registered variables into the vars struct.
     std::string val;
+    std::string var_name;
     bool has_val;
     for (auto i = 0; i < netsender::VAR_COUNT; i++) {
-        std::string var_name = id + "." + netsender::VARIABLES[i];
+        if (strcmp(netsender::VARIABLES[i], netsender::var::VAR_ID_VS) == 0) {
+            // Varsum (vs) is not prepended with id scope.
+            var_name = netsender::VARIABLES[i];
+        } else {
+            var_name = id + "." + netsender::VARIABLES[i];
+        }
         ESP_LOGI(TAG, "looking for variable: %s", var_name.c_str());
         has_val = netsender_extract_json(var_resp, var_name.c_str(), val);
         if (has_val) {
@@ -156,6 +164,7 @@ void app_main(void)
     } else {
         ESP_LOGI(TAG, "got variables from SD");
         vars = got_vars.value();
+        ns.set_varsum(vars.vs);
     }
 
     // Start the Audio Task.
