@@ -66,7 +66,7 @@ extern "C" {
 #include "esp_vfs_fat.h"
 
 // Current version of the speaker.
-static constexpr const auto SPEAKER_VERSION = "0.4.0";
+static constexpr const auto SPEAKER_VERSION = "0.4.1";
 
 // File to save variables to.
 static const constexpr auto VARS_FILE = "variables.txt";
@@ -145,6 +145,18 @@ void app_main(void)
     ESP_LOGI(TAG, "Amp Initialised");
 
     ESP_LOGI(TAG, "Speaker Netsender Version: %s", SPEAKER_VERSION);
+
+    // Get any stored variables from the SD card when it exists.
+    constexpr const auto MAX_VAR_PATH_LEN = 64;
+    char var_file[MAX_VAR_PATH_LEN];
+    snprintf(var_file, MAX_VAR_PATH_LEN, "%s/%s", MOUNT_POINT, VARS_FILE);
+    auto got_vars = netsender::read_vars_from_file(var_file);
+    if (!got_vars.has_value()) {
+        ESP_LOGW(TAG, "got no variables from SD");
+    } else {
+        ESP_LOGI(TAG, "got variables from SD");
+        vars = got_vars.value();
+    }
 
     // Start the Audio Task.
     xTaskCreatePinnedToCore(audio_task, "audio_task", 4096, &amp, 5, &player_handle, 1);
