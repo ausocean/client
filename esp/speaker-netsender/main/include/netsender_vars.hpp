@@ -19,28 +19,34 @@ const constexpr auto MAX_STR_VAR_LEN = 512;
 enum var_type_t {
     BYTE = 0,
     STRING = 1,
+    INT32 = 2,
 };
 
-constexpr const auto VAR_COUNT = 2;
+constexpr const auto VAR_COUNT = 3;
 
 namespace var {
+constexpr const auto VAR_ID_VS = "vs";
 constexpr const auto VAR_ID_VOLUME = "Volume";
 constexpr const auto VAR_ID_FILEPATH = "FilePath";
 }
 
 constexpr const auto VARIABLES = std::array{
+    var::VAR_ID_VS,
     var::VAR_ID_VOLUME,
     var::VAR_ID_FILEPATH,
 };
 
 struct device_var_state_t {
+    int32_t vs;
     char Volume;
     char FilePath[MAX_STR_VAR_LEN];
 };
 
 inline void update_state_member(device_var_state_t &state, const std::string& var_id, const std::string& val)
 {
-    if (var_id == var::VAR_ID_VOLUME) {
+    if (var_id == var::VAR_ID_VS) {
+        state.vs = static_cast<int32_t>(std::stoi(val));
+    } else if (var_id == var::VAR_ID_VOLUME) {
         state.Volume = static_cast<char>(std::stoi(val));
     } else if (var_id == var::VAR_ID_FILEPATH) {
         strncpy(state.FilePath, val.c_str(), sizeof(state.FilePath) - 1);
@@ -55,6 +61,10 @@ inline esp_err_t write_vars_to_file(const device_var_state_t &state, const std::
         return ESP_FAIL;
     }
 
+    if (fprintf(fd, "%s:%ld\n", var::VAR_ID_VS, state.vs) < 0) {
+        fclose(fd);
+        return ESP_FAIL;
+    }
     if (fprintf(fd, "%s:%d\n", var::VAR_ID_VOLUME, (int)state.Volume) < 0) {
         fclose(fd);
         return ESP_FAIL;

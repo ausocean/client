@@ -42,12 +42,21 @@ def generate_header(json_path: str, output_path: str) -> None:
     class VarType:
         BYTE: str = "byte"
         STRING: str = "string"
+        INT32: str = "int32"
 
     # Map JSON types to enum values.
-    ENUM_TYPE_MAP: dict[str, str] = {VarType.BYTE: "BYTE", VarType.STRING: "STRING"}
+    ENUM_TYPE_MAP: dict[str, str] = {
+        VarType.BYTE: "BYTE",
+        VarType.STRING: "STRING",
+        VarType.INT32: "INT32",
+    }
 
     # Map JSON types to C types.
-    C_TYPE_MAP: dict[str, str] = {VarType.BYTE: "char", VarType.STRING: "char*"}
+    C_TYPE_MAP: dict[str, str] = {
+        VarType.BYTE: "char",
+        VarType.STRING: "char*",
+        VarType.INT32: "int32_t",
+    }
 
     # Open the JSON file.
     with open(json_path, "r") as f:
@@ -61,6 +70,11 @@ def generate_header(json_path: str, output_path: str) -> None:
 
     # Get the registered variables.
     vars: list[dict[str, str]] = data[client_name][latest_version]["variables"]
+    vs_var: dict[str, str] = {
+        "name": "vs",
+        "type": VarType.INT32,
+    }
+    vars.insert(0, vs_var)
     var_count: int = len(vars)
 
     with open(output_path, "w") as f:
@@ -133,6 +147,10 @@ def generate_header(json_path: str, output_path: str) -> None:
                 f.write(
                     f"state.{var['name']}[sizeof(state.{var['name']}) - 1] = '\\0';\n"
                 )
+            elif var["type"] == VarType.INT32:
+                f.write(
+                    f"state.{var['name']} = static_cast<int32_t>(std::stoi(val));\n"
+                )
             first = False
 
         if not first:
@@ -157,6 +175,10 @@ def generate_header(json_path: str, output_path: str) -> None:
             elif var["type"] == VarType.STRING:
                 f.write(
                     f'if (fprintf(fd, "%s:%s\\n", {v_id}, state.{v_name}) < 0) {{ fclose(fd); return ESP_FAIL; }}\n'
+                )
+            elif var["type"] == VarType.INT32:
+                f.write(
+                    f'if (fprintf(fd, "%s:%ld\\n", {v_id}, state.{v_name}) < 0) {{ fclose(fd); return ESP_FAIL; }}\n'
                 )
 
         f.write("\nfclose(fd);\n")
