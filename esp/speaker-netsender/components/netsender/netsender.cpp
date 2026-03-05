@@ -28,15 +28,16 @@
 */
 
 #include "netsender.hpp"
-#include "esp_err.h"
-#include "esp_http_client.h"
-#include "esp_log.h"
-#include "esp_mac.h"
+
 #include <stdio.h>
 #include <string.h>
-#include <string>
 #include <sys/param.h>
 #include <stdlib.h>
+#include <ctype.h>
+#include <string>
+
+#include "esp_err.h"
+#include "esp_http_client.h"
 #include "esp_log.h"
 #include "esp_mac.h"
 #include "esp_system.h"
@@ -49,6 +50,8 @@
 #include "sdkconfig.h"
 #include "esp_timer.h"
 #include "esp_tls.h"
+#include "esp_log_color.h"
+#include "esp_tls_errors.h"
 
 static constexpr const auto MAX_HTTP_RECV_BUFFER = 512;
 static constexpr const auto MAX_URL_LEN          = 256;

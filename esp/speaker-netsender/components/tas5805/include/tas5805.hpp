@@ -26,10 +26,11 @@
 
 #pragma once
 
-#include "driver/i2c_master.h"
-#include "driver/i2s_std.h"
 #include <cstdint>
-#include <stdio.h>
+
+#include "driver/i2c_types.h"
+#include "driver/i2s_types.h"
+#include "esp_err.h"
 
 constexpr auto TAS8505_CHANGE_PAGE_REG   = 0x00;
 constexpr auto TAS8505_CHANGE_BOOK_REG   = 0x7F;
