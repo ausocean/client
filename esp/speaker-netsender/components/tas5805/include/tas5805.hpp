@@ -26,8 +26,6 @@
 
 #pragma once
 
-#include "driver/i2c_master.h"
-#include "driver/i2s_std.h"
 #include <cstdint>
 #include <stdio.h>
 #include <type_traits>

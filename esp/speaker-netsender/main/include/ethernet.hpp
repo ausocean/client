@@ -26,6 +26,8 @@
 
 #pragma once
 
+#include <stdint.h>
+
 #include "esp_event_base.h"
 
 /**

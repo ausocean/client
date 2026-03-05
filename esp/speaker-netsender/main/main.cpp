@@ -31,7 +31,12 @@ extern "C" {
     void app_main();
 }
 
-#include "driver/i2s_types.h"
+#include <stdio.h>
+#include <string.h>
+#include <array>
+#include <functional>
+#include <string>
+
 #include "freertos/projdefs.h"
 #include "netsender.hpp"
 #include "include/netsender_vars.hpp"
@@ -43,29 +48,11 @@ extern "C" {
 #include "soc/clk_tree_defs.h"
 #include "driver/i2s_types.h"
 #include "esp_err.h"
-#include "netsender.hpp"
-#include "soc/clk_tree_defs.h"
-#include "driver/i2s_types.h"
-#include "soc/clk_tree_defs.h"
-#include <stdio.h>
-#include <string.h>
 #include "freertos/FreeRTOS.h" // IWYU pragma: keep
 #include "freertos/task.h"
-#include <ethernet_init.h>
-#include <esp_eth.h>
-#include <esp_netif.h>
-#include <esp_types.h>
-#include "esp_event.h"
-#include <sdkconfig.h>
 #include "esp_log.h"
-#include "driver/sdspi_host.h"
-#include "esp_vfs_fat.h"
-#include "driver/i2c_master.h"
-#include "driver/i2s_std.h"
 #include "tas5805.hpp"
-#include <sys/unistd.h>
-#include <sys/stat.h>
-#include "esp_vfs_fat.h"
+#include "esp_log_color.h"
 
 // Current version of the speaker.
 static constexpr const auto SPEAKER_VERSION = "0.4.2";
