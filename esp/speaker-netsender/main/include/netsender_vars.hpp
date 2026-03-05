@@ -1,8 +1,12 @@
 #pragma once
 #include <array>
+#include <cstdio>
+#include <optional>
 #include <string>
 #include <cstring>
+
 #include "esp_err.h"
+#include "esp_log.h"
 
 // Generated for esp-speaker v1
 
@@ -62,5 +66,46 @@ inline esp_err_t write_vars_to_file(const device_var_state_t &state, const std::
 
     fclose(fd);
     return ESP_OK;
+}
+
+inline std::optional<device_var_state_t> read_vars_from_file(const std::string& file_path)
+{
+    device_var_state_t vars = {};
+
+    ESP_LOGI("NETSENDER_VARS", "opening file");
+    FILE* fd = fopen(file_path.c_str(), "r");
+    if (fd == NULL) {
+        return std::nullopt;
+    }
+    ESP_LOGI("NETSENDER_VARS", "file opened");
+
+    // This is longer than we need, however, we don't have a standard
+    // YET for how long a variable name can be.
+    static char out[2 * MAX_STR_VAR_LEN + 1];
+    char* value = NULL;
+    while (fgets(out, 2 * MAX_STR_VAR_LEN, fd) != nullptr) {
+        if (strlen(out) >= 2 * MAX_STR_VAR_LEN) {
+            printf("err line too long for buffer: '%s' (len: %d)\n", out, strlen(out));
+            break;
+        }
+
+        // Remove any newline characters.
+        out[strcspn(out, "\r\n")] = '\0';
+
+        // Find the seperator.
+        value = strchr(out, ':');
+        if (value == NULL) {
+            ESP_LOGE("NETSENDER_VARS", "unable to find sep (:)\n");
+            break;
+        }
+        *value = '\0'; // Terminate the first string (name).
+        value++; // Point to the start of the second string (value).
+
+        ESP_LOGI("NETSENDER_VARS", "got variable: %s = %s", out, value);
+        update_state_member(vars, out, value);
+    }
+
+    fclose(fd);
+    return vars;
 }
 } // namespace netsender

@@ -66,7 +66,7 @@ def generate_header(json_path: str, output_path: str) -> None:
     with open(output_path, "w") as f:
         # Add includes.
         f.write(
-            '#pragma once\n#include <array>\n#include <string>\n#include <cstring>\n#include "esp_err.h"\n\n'
+            '#pragma once\n#include <array>\n#include <cstdio>\n#include <optional>\n#include <string>\n#include <cstring>\n\n#include "esp_err.h"\n#include "esp_log.h"\n\n'
         )
         f.write(f"// Generated for {client_name} {latest_version}\n\n")
 
@@ -162,6 +162,50 @@ def generate_header(json_path: str, output_path: str) -> None:
         f.write("\nfclose(fd);\n")
         f.write("return ESP_OK;\n")
         f.write("}\n")
+
+        # Write the read function.
+        f.write("""
+                inline std::optional<device_var_state_t> read_vars_from_file(const std::string& file_path)
+                {
+                    device_var_state_t vars = {};
+
+                    ESP_LOGI("NETSENDER_VARS", "opening file");
+                    FILE* fd = fopen(file_path.c_str(), "r");
+                    if (fd == NULL) {
+                        return std::nullopt;
+                    }
+                    ESP_LOGI("NETSENDER_VARS", "file opened");
+
+                    // This is longer than we need, however, we don't have a standard
+                    // YET for how long a variable name can be.
+                    static char out[2 * MAX_STR_VAR_LEN + 1];
+                    char* value = NULL;
+                    while (fgets(out, 2 * MAX_STR_VAR_LEN, fd) != nullptr) {
+                        if (strlen(out) >= 2 * MAX_STR_VAR_LEN) {
+                            printf("err line too long for buffer: '%s' (len: %d)\\n", out, strlen(out));
+                            break;
+                        }
+
+                        // Remove any newline characters.
+                        out[strcspn(out, "\\r\\n")] = '\\0';
+
+                        // Find the seperator.
+                        value = strchr(out, ':');
+                        if (value == NULL) {
+                            ESP_LOGE("NETSENDER_VARS", "unable to find sep (:)\\n");
+                            break;
+                        }
+                        *value = '\\0'; // Terminate the first string (name).
+                        value++; // Point to the start of the second string (value).
+
+                        ESP_LOGI("NETSENDER_VARS", "got variable: %s = %s", out, value);
+                        update_state_member(vars, out, value);
+                    }
+
+                    fclose(fd);
+                    return vars;
+                }
+            """)
 
         f.write("} // namespace netsender\n")
 
