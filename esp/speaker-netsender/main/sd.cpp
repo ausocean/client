@@ -29,6 +29,10 @@
 #include "esp_vfs_fat.h"
 #include "sd_protocol_types.h"
 #include "include/globals.h"
+#include "esp_err.h"
+#include "hal/spi_types.h"
+#include "sdkconfig.h"
+#include "soc/gpio_num.h"
 
 void init_sd()
 {

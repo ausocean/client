@@ -29,14 +29,14 @@
 
 #pragma once
 
-#include "freertos/projdefs.h"
-#include "sdkconfig.h"
-#include <esp_netif.h>
-#include <esp_types.h>
-#include "esp_http_client.h"
+#include <stddef.h>
+#include <stdint.h>
 #include <optional>
 #include <functional>
 #include <string>
+
+#include "sdkconfig.h"
+#include "esp_err.h"
 
 constexpr const auto NETSENDER_MAC_SIZE       = 18;
 constexpr const auto NETSENDER_WIFI_SIZE      = 80;

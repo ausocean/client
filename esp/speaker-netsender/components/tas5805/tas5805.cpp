@@ -28,16 +28,23 @@
 */
 
 #include "tas5805.hpp"
+
+#include <esp_log.h>
+#include <stdio.h>
+#include <string.h>
+#include <cstdint>
+#include <cstdlib>
+
 #include "driver/i2c_master.h"
 #include "driver/i2s_common.h"
 #include "esp_err.h"
-#include "freertos/FreeRTOS.h"
+#include "freertos/FreeRTOS.h" // IWYU pragma: keep
 #include "freertos/task.h"
-#include <cstdint>
-#include <cstdlib>
-#include <esp_log.h>
-#include <math.h>
-#include <stdio.h>
+#include "esp_heap_caps.h"
+#include "freertos/projdefs.h"
+#include "hal/i2c_types.h"
+#include "portmacro.h"
+#include "sdkconfig.h"
 
 static const char *TAG = "tas5805";
 
