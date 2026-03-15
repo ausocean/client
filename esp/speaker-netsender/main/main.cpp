@@ -37,6 +37,7 @@ extern "C" {
 #include "include/ethernet.hpp"
 #include "include/sd.hpp"
 #include "include/globals.h"
+#include "include/log.hpp"
 #include "soc/clk_tree_defs.h"
 #include "driver/i2s_types.h"
 #include "esp_err.h"
@@ -65,7 +66,7 @@ extern "C" {
 #include "esp_vfs_fat.h"
 
 // Current version of the speaker.
-static constexpr const auto SPEAKER_VERSION = "0.3.1";
+static constexpr const auto SPEAKER_VERSION = "0.4.0";
 
 // File to save variables to.
 static const constexpr auto VARS_FILE = "variables.txt";
@@ -127,11 +128,13 @@ esp_err_t parse_vars(std::string var_resp)
 
 void app_main(void)
 {
-    ESP_LOGI(TAG, "Speaker Netsender Version: %s", SPEAKER_VERSION);
-
     ESP_LOGI(TAG, "Initialising ethernet");
     init_ethernet();
     ESP_LOGI(TAG, "Ethernet initialised");
+
+    ESP_LOGI(TAG, "Initialising UDP Logging");
+    init_udp_logging();
+    ESP_LOGI(TAG, "Logging Initialised");
 
     ESP_LOGI(TAG, "Initialising SD card");
     init_sd();
@@ -140,6 +143,8 @@ void app_main(void)
     ESP_LOGI(TAG, "Initialising I2S Amp");
     auto amp = init_amp();
     ESP_LOGI(TAG, "Amp Initialised");
+
+    ESP_LOGI(TAG, "Speaker Netsender Version: %s", SPEAKER_VERSION);
 
     // Start the Audio Task.
     xTaskCreatePinnedToCore(audio_task, "audio_task", 4096, &amp, 5, &player_handle, 1);
