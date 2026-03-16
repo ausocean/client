@@ -1,6 +1,7 @@
 /*
   Name:
-    UDP Log Viewer - CLI tool for viewing, and saving logs sent via UDP.
+    Remote ESP Tool - CLI tool for interacting with AusOcean ESP devices
+    over the network.
 
   Authors:
     David Sutton <davidsutton@ausocean.org>
@@ -76,7 +77,7 @@ func printBanner() {
 		Faint(true)
 
 	// Render the text.
-	title := titleStyle.Render("UDP Log Reader")
+	title := titleStyle.Render("Remote ESP Tool")
 	meta := metaStyle.Render("AusOcean  •  GPL-2.0 License")
 
 	// Stack and print.
