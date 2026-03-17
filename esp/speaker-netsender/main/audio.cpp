@@ -25,9 +25,14 @@
 */
 
 #include "include/audio.hpp"
-#include <cstring>
+
 #include <stdio.h>
 #include <sys/stat.h>
+#include <cstring>
+
+#include "driver/i2c_master.h" // IWYU pragma: keep
+#include "driver/i2s_common.h" // IWYU pragma: keep
+#include "driver/i2s_std.h"    // IWYU pragma: keep
 #include "esp_crt_bundle.h"
 #include "esp_err.h"
 #include "esp_http_client.h"
@@ -35,6 +40,15 @@
 #include "mbedtls/sha256.h"
 #include "include/netsender_vars.hpp"
 #include "include/globals.h"
+#include "driver/i2c_types.h"
+#include "driver/i2s_types.h"
+#include "esp_log_color.h"
+#include "freertos/projdefs.h"
+#include "freertos/task.h"
+#include "hal/i2s_types.h"
+#include "sdkconfig.h"
+#include "soc/clk_tree_defs.h"
+#include "soc/gpio_num.h"
 
 static constexpr const auto TAG = "audio";
 
