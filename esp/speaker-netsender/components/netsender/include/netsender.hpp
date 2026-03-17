@@ -157,6 +157,13 @@ public:
     esp_err_t heartbeat();
 
     /**
+     * @brief set the current varsum.
+     *
+     * @param varsum the new varsum.
+     */
+    void set_varsum(const int32_t varsum);
+
+    /**
      * @brief start netsender task.
      */
     void start();
