@@ -26,16 +26,18 @@
 
 #pragma once
 
+#include "driver/i2c_types.h"
+#include "driver/i2s_types.h"
+#include "esp_err.h"
 #include <cstdint>
-#include <stdio.h>
 #include <type_traits>
 
-constexpr auto TAS8505_CHANGE_PAGE_REG   = 0x00;
-constexpr auto TAS8505_CHANGE_BOOK_REG   = 0x7F;
-constexpr auto TAS8505_DEVICE_CTRL_1_REG = 0x02;
-constexpr auto TAS8505_DEVICE_CTRL_2_REG = 0x03;
-constexpr auto TAS8505_DIG_VOL_CTRL_REG  = 0x4C;
-constexpr auto TAS8505_AGAIN_REG         = 0x54;
+constexpr auto TAS5805_CHANGE_PAGE_REG   = 0x00;
+constexpr auto TAS5805_CHANGE_BOOK_REG   = 0x7F;
+constexpr auto TAS5805_DEVICE_CTRL_1_REG = 0x02;
+constexpr auto TAS5805_DEVICE_CTRL_2_REG = 0x03;
+constexpr auto TAS5805_DIG_VOL_CTRL_REG  = 0x4C;
+constexpr auto TAS5805_AGAIN_REG         = 0x54;
 
 /**
  * @brief TAS5805 is an I2S amplifier.
