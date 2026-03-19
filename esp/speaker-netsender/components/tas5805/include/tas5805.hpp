@@ -36,6 +36,7 @@ constexpr auto TAS5805_CHANGE_PAGE_REG   = 0x00;
 constexpr auto TAS5805_CHANGE_BOOK_REG   = 0x7F;
 constexpr auto TAS5805_DEVICE_CTRL_1_REG = 0x02;
 constexpr auto TAS5805_DEVICE_CTRL_2_REG = 0x03;
+constexpr auto TAS5805_CLKDET_STATUS_REG = 0x39;
 constexpr auto TAS5805_DIG_VOL_CTRL_REG  = 0x4C;
 constexpr auto TAS5805_AGAIN_REG         = 0x54;
 
@@ -51,6 +52,11 @@ public:
      * @param tx_handle i2s transmit pipe handler to play audio.
      */
     TAS5805(i2c_master_bus_handle_t handle, i2s_chan_handle_t* tx_handle);
+
+    /**
+     * @brief returns the status of the device (communicating or not).
+     */
+    bool is_connected();
 
     /**
      * @brief Reads PCM data from a file and writes it to the I2S DMA buffer.

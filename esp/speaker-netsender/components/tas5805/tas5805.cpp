@@ -100,6 +100,29 @@ TAS5805::TAS5805(i2c_master_bus_handle_t i2c_bus_handle,
     vTaskDelay(pdMS_TO_TICKS(10));
 }
 
+bool TAS5805::is_connected()
+{
+    write_reg(TAS5805_CHANGE_PAGE_REG, PAGE::ZERO); // Go to page 0.
+    write_reg(TAS5805_CHANGE_BOOK_REG, BOOK::ZERO); // Go to book 0.
+
+    uint8_t reg = TAS5805_CLKDET_STATUS_REG;
+    uint8_t data_out = 0;
+
+    esp_err_t err = i2c_master_transmit_receive(dev_handle, &reg, 1, &data_out, 1, 50);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "I2C Read Failed: %s", esp_err_to_name(err));
+        return false;
+    }
+
+    constexpr uint8_t PLL_LOCK = 0x08;
+    if ((data_out & PLL_LOCK) != PLL_LOCK) {
+        ESP_LOGE(TAG, "PLL not locked");
+        return false;
+    }
+
+    return true;
+}
+
 esp_err_t TAS5805::play(const char *path, volatile bool* kill_request)
 {
     // Ensure a valid I2S handle exists to send audio.
