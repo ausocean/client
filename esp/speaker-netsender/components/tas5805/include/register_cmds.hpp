@@ -45,8 +45,8 @@ enum class CTRL_STATE : uint8_t {
 };
 
 enum class DAMP_PBTL : uint8_t {
-    BTL_MODE  = 0b0,
-    PBTL_MODE = 0b1,
+    BTL_MODE  = 0b0 << 2,
+    PBTL_MODE = 0b1 << 2,
 };
 
 enum class ANA_GAIN : uint8_t {
