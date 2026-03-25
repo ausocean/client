@@ -39,10 +39,12 @@ extern "C" {
 
 #include "freertos/projdefs.h"
 #include "netsender.hpp"
+#include "ota_tcp.hpp"
 #include "include/netsender_vars.hpp"
 #include "include/audio.hpp"
 #include "include/ethernet.hpp"
 #include "include/sd.hpp"
+#include "include/self_check.hpp"
 #include "include/globals.h"
 #include "include/log.hpp"
 #include "soc/clk_tree_defs.h"
@@ -55,7 +57,7 @@ extern "C" {
 #include "esp_log_color.h"
 
 // Current version of the speaker.
-static constexpr const auto SPEAKER_VERSION = "0.4.2";
+static constexpr const auto SPEAKER_VERSION = "0.5.0";
 
 // File to save variables to.
 static const constexpr auto VARS_FILE = "variables.txt";
@@ -138,6 +140,14 @@ void app_main(void)
     ESP_LOGI(TAG, "Initialising I2S Amp");
     auto amp = init_amp();
     ESP_LOGI(TAG, "Amp Initialised");
+
+    // Perform partition self-check.
+    const auto valid_partition = self_check_ok(&amp);
+    ota_tcp_validate_partition(valid_partition);
+
+    ESP_LOGI(TAG, "Initialising OTA listener");
+    init_ota_tcp();
+    ESP_LOGI(TAG, "OTA Initialised");
 
     ESP_LOGI(TAG, "Speaker Netsender Version: %s", SPEAKER_VERSION);
 
