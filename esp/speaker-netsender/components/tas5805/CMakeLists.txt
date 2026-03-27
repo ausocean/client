@@ -1,4 +1,4 @@
 idf_component_register(SRCS "tas5805.cpp"
                     INCLUDE_DIRS "include"
-                    REQUIRES driver
+                    REQUIRES esp_driver_i2c esp_driver_i2s
 )
