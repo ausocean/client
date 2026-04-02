@@ -329,6 +329,7 @@ esp_err_t http_event_handler(esp_http_client_event_t *evt)
         esp_http_client_set_header(evt->client, "Accept", "text/html");
         esp_http_client_set_redirection(evt->client);
         break;
+    default:
     }
     return ESP_OK;
 }

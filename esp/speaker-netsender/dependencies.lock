@@ -111,14 +111,27 @@ dependencies:
       registry_url: https://components.espressif.com/
       type: service
     version: 1.2.0
+  espressif/lan87xx:
+    component_hash: e532dd62590996a64fe76c7906821c6b0816be2c8e31196284f4442027703243
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=6.0'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    targets:
+    - esp32
+    - esp32p4
+    version: 1.0.0
   idf:
     source:
       type: idf
-    version: 5.5.2
+    version: 6.0.0
   netsender:
     dependencies: []
     source:
-      path: /home/david/go/src/github.com/ausocean/client/esp/speaker-netsender/components/netsender
+      path: components/netsender
       type: local
     version: '*'
   tas5805:
@@ -126,7 +139,7 @@ dependencies:
     - name: idf
       version: '>=4.1.0'
     source:
-      path: /home/david/go/src/github.com/ausocean/client/esp/speaker-netsender/components/tas5805
+      path: components/tas5805
       type: local
     version: '*'
 direct_dependencies:
@@ -136,4 +149,4 @@ direct_dependencies:
 - tas5805
 manifest_hash: f4759599976a8765010d0e138336800bca1138803c4a94781dcafd520320940a
 target: esp32
-version: 2.0.0
+version: 3.0.0
