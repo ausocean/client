@@ -36,7 +36,7 @@
 #include "esp_log.h"
 #include "register_cmds.hpp"
 #include "driver/i2c_master.h"
-#include "driver/i2s_common.h"
+#include "driver/i2s_std.h"
 #include "esp_err.h"
 #include "freertos/FreeRTOS.h" // IWYU pragma: keep
 #include "freertos/task.h"
