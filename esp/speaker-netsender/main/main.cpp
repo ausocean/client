@@ -164,7 +164,7 @@ void app_main(void)
     ns.start();
 
     char cur_audio_file[netsender::MAX_STR_VAR_LEN];
-    strncpy(cur_audio_file, vars.FilePath, 64);
+    strlcpy(cur_audio_file, vars.FilePath, sizeof(cur_audio_file));
 
     while (true) {
         amp.set_volume(vars.Volume);
@@ -178,7 +178,7 @@ void app_main(void)
             } else {
                 ESP_LOGE(TAG, "couldn't load new file, continuing with old file");
             }
-            strncpy(cur_audio_file, vars.FilePath, strlen(vars.FilePath));
+            strncpy(cur_audio_file, vars.FilePath, sizeof(cur_audio_file));
             amp.pause();
         }
 
