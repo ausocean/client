@@ -37,16 +37,16 @@
 #include "esp_err.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
-#include "mbedtls/sha256.h"
 #include "include/netsender_vars.hpp"
 #include "include/globals.h"
 #include "driver/i2c_types.h"
 #include "driver/i2s_types.h"
-#include "esp_log_color.h"
 #include "freertos/projdefs.h"
 #include "freertos/task.h"
 #include "hal/i2s_types.h"
+#include "rom/sha.h"
 #include "sdkconfig.h"
+#include "sha/sha_core.h"
 #include "soc/clk_tree_defs.h"
 #include "soc/gpio_num.h"
 
@@ -55,7 +55,7 @@ static constexpr const auto TAG = "audio";
 void url_to_filename(const char* url, char* out_filename)
 {
     unsigned char hash[32];
-    mbedtls_sha256((const unsigned char*)url, strlen(url), hash, 0);
+    esp_sha(SHA2_256, (const unsigned char*)url, strlen(url), hash);
 
     // Convert bytes to a hex string.
     for (int i = 0; i < 32; i++) {
