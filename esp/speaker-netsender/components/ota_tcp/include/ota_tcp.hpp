@@ -29,4 +29,12 @@
 /**
  * @brief initialises the OTA TCP update listener.
  */
-void init_ota_tcp(void *);
+void init_ota_tcp();
+
+/**
+ * @brief validates the current partition using the passsed self check
+ * result.
+ *
+ * @param[in] valid_partition indicates a successful self check
+ */
+void ota_tcp_validate_partition(bool valid_partition);
