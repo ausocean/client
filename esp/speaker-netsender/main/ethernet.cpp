@@ -28,6 +28,8 @@
 
 #include <stddef.h>
 
+#include "esp_eth_phy_lan87xx.h"
+
 #include "esp_eth_com.h"
 #include "esp_eth_driver.h"
 #include "esp_eth_netif_glue.h"
