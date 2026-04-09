@@ -26,6 +26,7 @@
 
 #include "include/ethernet.hpp"
 
+#include <cstdint>
 #include <stddef.h>
 
 #include "esp_eth_phy_lan87xx.h"
@@ -42,7 +43,6 @@
 #include "esp_eth_mac.h"
 #include "esp_eth_mac_esp.h"
 #include "esp_eth_phy.h"
-#include "esp_log_color.h"
 #include "esp_netif_defaults.h"
 #include "esp_netif_ip_addr.h"
 #include "sdkconfig.h"

@@ -1,4 +1,4 @@
 CompileFlags:
-  Remove: [-f*, -m*]
-  CompilationDatabase: "./build"
-  BuiltinHeaders: QueryDriver
+    Remove: [-f*, -m*]
+    CompilationDatabase: "./build"
+    BuiltinHeaders: QueryDriver

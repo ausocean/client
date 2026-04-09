@@ -28,7 +28,9 @@
 
 #include <cstdarg>
 #include <cstdio>
+#include "cc.h"
 #include "esp_log_write.h"
+#include "lwip/inet.h"
 #include "lwip/sockets.h"
 
 static auto log_socket = -1;
