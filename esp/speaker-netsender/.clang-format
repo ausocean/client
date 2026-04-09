@@ -1,0 +1,40 @@
+---
+# Based on --style=otbs (One True Brace Style), --attach-namespaces, and --attach-classes
+# "Attach" places opening braces on the same line for control statements, functions, classes, and namespaces.
+BreakBeforeBraces: Custom
+BraceWrapping:
+    AfterFunction: true
+
+IndentWidth: 4
+UseTab: Never
+
+PointerAlignment: Right
+
+AllowShortBlocksOnASingleLine: Always
+AllowShortFunctionsOnASingleLine: All
+AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortLoopsOnASingleLine: true
+
+SpaceBeforeParens: ControlStatements
+SpacesInParentheses: false
+SpaceBeforeAssignmentOperators: true
+
+ColumnLimit: 120
+ContinuationIndentWidth: 4
+
+IncludeBlocks: Regroup
+SortIncludes: true
+IncludeCategories:
+    # Group 0: Force FreeRTOS.h to the absolute top
+    - Regex: '^"freertos/FreeRTOS\.h"'
+      Priority: 0
+    # Group 1: Standard Library headers
+    - Regex: "^<.*"
+      Priority: 1
+    # Group 2: ESP-IDF component headers
+    - Regex: '^"(esp|freertos|driver|hal).*'
+      Priority: 2
+    # Group 3: Your project local headers
+    - Regex: ".*"
+      Priority: 3
+...

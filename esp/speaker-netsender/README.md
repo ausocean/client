@@ -2,41 +2,40 @@
 
 This project is for an ethernet connected ESP32 controller which implements the netsender protocol. This controller is PoE powered, has a removable SD card, and has an onboard 20W amplifier capable of driving a 8Ω speaker.
 
+## ESP-IDF setup
+
+Install ESP-IDF v6.0 and follow the documentation on setting up your development environment. The project uses the clang toolchain, to do this add the follow environment variable to your environment:
+
+```sh
+export IDF_TOOLCHAIN=clang
+```
+
 ## Formatting
 
-ESP-IDF provides the following formatter command for formatting C and C++ files:
+There is an included `.clang-format` file which defines the formatting parameters for all c++ code and headers. Many IDEs support clangd intergration which will often read this file and apply the appropriate styles automatically. This may need to be configured, see your IDEs documentation for steps on how to do this.
 
-```bash
-$ astyle --style=otbs --attach-namespaces --attach-classes --indent=spaces=4 --convert-tabs --align-reference=name --keep-one-line-statements --pad-header --pad-oper --unpad-paren --max-continuation-indent=120 -r -n "*.hpp,*.cpp,*.c,*.h"
+Alternatively, clang-format can be run manually via the command line, using the following command for each file:
+
+```sh
+clang-format -i <filepath>
 ```
 
 ## Managing Includes
 
-`scripts/run_iwyu.sh` uses [Include What You Use (IWYU)](https://include-what-you-use.org/) to
-identify missing or unnecessary `#include` directives in the project's source files.
+There is also a `.clang-tidy` file which specifically handles management of imports. This should also be set to run through clangd.
 
-This should be run:
+Alternatively this can also be run manually via the command line:
 
-- After adding new functionality, to check whether any new includes are needed
-- During code review, to catch unnecessary includes that increase compile times
-- When refactoring, to confirm that includes are still required after removing code
-
-To run it, first Include What You Need must be installed on your system. Then IWYU can be used to manage a single file, or a whole directory.
-
-```bash
-# Analyze a single file
-./scripts/run_iwyu.sh main/main.cpp
-
-# Format a directory
-./scripts/run_iwyu main/
+```sh
+clang-tidy --fix <filepath>
 ```
 
-**Keeping includes that IWYU wants to remove:**
+**Keeping includes that clang-tidy wants to remove:**
 
-IWYU sometimes suggests removing ESP-IDF driver headers that are actually needed
+clang-tidy sometimes suggests removing ESP-IDF driver headers that are actually needed
 as direct includes, because it can see them transitively through other headers.
 Those transitive paths are implementation details that can change between IDF
-versions, so it is safer to include driver headers explicitly. To tell IWYU to
+versions, so it is safer to include driver headers explicitly. To tell clang-tidy to
 leave a specific include alone, add a pragma comment:
 
 ```cpp
