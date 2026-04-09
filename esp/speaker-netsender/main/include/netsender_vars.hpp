@@ -61,7 +61,7 @@ inline esp_err_t write_vars_to_file(const device_var_state_t &state, const std::
         return ESP_FAIL;
     }
 
-    if (fprintf(fd, "%s:%ld\n", var::VAR_ID_VS, state.vs) < 0) {
+    if (fprintf(fd, "%s:%d\n", var::VAR_ID_VS, state.vs) < 0) {
         fclose(fd);
         return ESP_FAIL;
     }
