@@ -91,7 +91,7 @@ def generate_header(json_path: str, output_path: str) -> None:
         f.write(f'const constexpr auto ICD_VERSION = "{latest_version}";\n\n')
 
         # Export max string variable length.
-        f.write(f"const constexpr auto MAX_STR_VAR_LEN = 512;\n\n")
+        f.write("const constexpr auto MAX_STR_VAR_LEN = 512;\n\n")
 
         # Generate enums.
         f.write("enum var_type_t {\n")
@@ -178,7 +178,7 @@ def generate_header(json_path: str, output_path: str) -> None:
                 )
             elif var["type"] == VarType.INT32:
                 f.write(
-                    f'if (fprintf(fd, "%s:%ld\\n", {v_id}, state.{v_name}) < 0) {{ fclose(fd); return ESP_FAIL; }}\n'
+                    f'if (fprintf(fd, "%s:%d\\n", {v_id}, state.{v_name}) < 0) {{ fclose(fd); return ESP_FAIL; }}\n'
                 )
 
         f.write("\nfclose(fd);\n")
