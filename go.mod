@@ -1,6 +1,6 @@
 module github.com/ausocean/client
 
-go 1.24.0
+go 1.25.0
 
 require (
 	github.com/Shopify/toxiproxy v2.1.4+incompatible
@@ -34,7 +34,7 @@ require (
 	github.com/sergi/go-diff v1.3.1 // indirect
 	go.uber.org/multierr v1.10.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
-	golang.org/x/image v0.18.0 // indirect
+	golang.org/x/image v0.38.0 // indirect
 	golang.org/x/sys v0.38.0 // indirect
-	golang.org/x/text v0.31.0 // indirect
+	golang.org/x/text v0.35.0 // indirect
 )
