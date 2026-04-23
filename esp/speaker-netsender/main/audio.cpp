@@ -26,24 +26,25 @@
 
 #include "include/audio.hpp"
 
+#include <cstring>
 #include <stdio.h>
 #include <sys/stat.h>
-#include <cstring>
 
 #include "driver/i2c_master.h" // IWYU pragma: keep
+#include "driver/i2c_types.h"
 #include "driver/i2s_common.h" // IWYU pragma: keep
 #include "driver/i2s_std.h"    // IWYU pragma: keep
+#include "driver/i2s_types.h"
 #include "esp_crt_bundle.h"
 #include "esp_err.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
-#include "include/netsender_vars.hpp"
-#include "include/globals.h"
-#include "driver/i2c_types.h"
-#include "driver/i2s_types.h"
 #include "freertos/projdefs.h"
 #include "freertos/task.h"
 #include "hal/i2s_types.h"
+
+#include "include/globals.h"
+#include "include/netsender_vars.hpp"
 #include "rom/sha.h"
 #include "sdkconfig.h"
 #include "sha/sha_core.h"
@@ -53,10 +54,10 @@
 
 static constexpr const auto TAG = "audio";
 
-void url_to_filename(const char* url, char* out_filename)
+void url_to_filename(const char *url, char *out_filename)
 {
     unsigned char hash[32];
-    esp_sha(SHA2_256, (const unsigned char*)url, strlen(url), hash);
+    esp_sha(SHA2_256, (const unsigned char *)url, strlen(url), hash);
 
     // Convert bytes to a hex string.
     for (int i = 0; i < 32; i++) {
@@ -79,7 +80,7 @@ esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 {
     switch (evt->event_id) {
     case HTTP_EVENT_ON_DATA: {
-        auto ctx = static_cast<DownloadContext*>(evt->user_data);
+        auto ctx = static_cast<DownloadContext *>(evt->user_data);
         auto bytes_written = fwrite(evt->data, 1, evt->data_len, ctx->file);
         ctx->total_downloaded = ctx->total_downloaded + bytes_written;
         if (ctx->total_downloaded >= ctx->last_logged_bytes + 100000) {
@@ -151,8 +152,7 @@ esp_err_t download_file_to_sdcard()
         return ESP_FAIL;
     }
 
-    ESP_LOGI("DOWNLOAD", "Status = %d, length = %lld",
-             esp_http_client_get_status_code(client),
+    ESP_LOGI("DOWNLOAD", "Status = %d, length = %lld", esp_http_client_get_status_code(client),
              esp_http_client_get_content_length(client));
 
     fclose(f);
@@ -178,33 +178,35 @@ TAS5805 init_amp()
     ESP_LOGI(TAG, "I2C Master bus created");
 
     // Configure I2S Channel.
-    i2s_chan_handle_t* tx_handle = new i2s_chan_handle_t();
+    i2s_chan_handle_t *tx_handle = new i2s_chan_handle_t();
     i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
     chan_cfg.dma_desc_num = 16;
     chan_cfg.dma_frame_num = 512;
     ESP_ERROR_CHECK(i2s_new_channel(&chan_cfg, tx_handle, NULL));
 
     i2s_std_config_t std_cfg = {
-        .clk_cfg = {
-            .sample_rate_hz = CONFIG_AMP_I2S_SAMPLE_RATE,
-            .clk_src = I2S_CLK_SRC_APLL,
-            .mclk_multiple = I2S_MCLK_MULTIPLE_256,
-            .bclk_div = 8,
-        },
-        .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO),
-        .gpio_cfg = {
-            .mclk = I2S_GPIO_UNUSED,
-            .bclk = static_cast<gpio_num_t>(CONFIG_AMP_I2S_BCLK),
-            .ws   = static_cast<gpio_num_t>(CONFIG_AMP_I2S_WS),
-            .dout = static_cast<gpio_num_t>(CONFIG_AMP_I2S_DOUT),
-            .din  = I2S_GPIO_UNUSED,
-            .invert_flags =
+        .clk_cfg =
             {
-                .mclk_inv = false,
-                .bclk_inv = false,
-                .ws_inv = false,
+                .sample_rate_hz = CONFIG_AMP_I2S_SAMPLE_RATE,
+                .clk_src = I2S_CLK_SRC_APLL,
+                .mclk_multiple = I2S_MCLK_MULTIPLE_256,
+                .bclk_div = 8,
             },
-        },
+        .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO),
+        .gpio_cfg =
+            {
+                .mclk = I2S_GPIO_UNUSED,
+                .bclk = static_cast<gpio_num_t>(CONFIG_AMP_I2S_BCLK),
+                .ws = static_cast<gpio_num_t>(CONFIG_AMP_I2S_WS),
+                .dout = static_cast<gpio_num_t>(CONFIG_AMP_I2S_DOUT),
+                .din = I2S_GPIO_UNUSED,
+                .invert_flags =
+                    {
+                        .mclk_inv = false,
+                        .bclk_inv = false,
+                        .ws_inv = false,
+                    },
+            },
     };
 
     // Initialise channel.
@@ -223,7 +225,7 @@ TAS5805 init_amp()
 void audio_task(void *pvParameters)
 {
     constexpr const auto AUDIO_TAG = "AUDIO";
-    auto *amp = static_cast<TAS5805*>(pvParameters);
+    auto *amp = static_cast<TAS5805 *>(pvParameters);
     if (amp == nullptr) {
         ESP_LOGE(AUDIO_TAG, "Received null pointer!");
         vTaskDelete(NULL);

@@ -26,32 +26,33 @@
 
 #pragma once
 
-#include "driver/i2c_types.h"
-#include "driver/i2s_types.h"
-#include "esp_err.h"
 #include <cstdint>
 #include <type_traits>
 
-constexpr auto TAS5805_CHANGE_PAGE_REG   = 0x00;
-constexpr auto TAS5805_CHANGE_BOOK_REG   = 0x7F;
+#include "driver/i2c_types.h"
+#include "driver/i2s_types.h"
+#include "esp_err.h"
+
+constexpr auto TAS5805_CHANGE_PAGE_REG = 0x00;
+constexpr auto TAS5805_CHANGE_BOOK_REG = 0x7F;
 constexpr auto TAS5805_DEVICE_CTRL_1_REG = 0x02;
 constexpr auto TAS5805_DEVICE_CTRL_2_REG = 0x03;
 constexpr auto TAS5805_CLKDET_STATUS_REG = 0x39;
-constexpr auto TAS5805_DIG_VOL_CTRL_REG  = 0x4C;
-constexpr auto TAS5805_AGAIN_REG         = 0x54;
+constexpr auto TAS5805_DIG_VOL_CTRL_REG = 0x4C;
+constexpr auto TAS5805_AGAIN_REG = 0x54;
 
 /**
  * @brief TAS5805 is an I2S amplifier.
  */
 class TAS5805 {
-public:
+  public:
     /**
      * @brief Create a new TAS5805
      *
      * @param bus_handle i2c bus handler to connect the amplifier to.
      * @param tx_handle i2s transmit pipe handler to play audio.
      */
-    TAS5805(i2c_master_bus_handle_t handle, i2s_chan_handle_t* tx_handle);
+    TAS5805(i2c_master_bus_handle_t handle, i2s_chan_handle_t *tx_handle);
 
     /**
      * @brief returns the status of the device (communicating or not).
@@ -62,7 +63,7 @@ public:
      * @brief Reads PCM data from a file and writes it to the I2S DMA buffer.
      * @param f Pointer to the opened audio file
      */
-    esp_err_t play(const char* path, volatile bool* kill_request);
+    esp_err_t play(const char *path, volatile bool *kill_request);
 
     /**
      * @brief Pauses playback of the amp.
@@ -80,7 +81,7 @@ public:
      */
     ~TAS5805();
 
-private:
+  private:
     /**
      * @brief Writes the data to the given register.
      *
@@ -95,11 +96,8 @@ private:
      * @param reg number of the register to be written.
      * @param cmds variadic list of uint8_t command enums.
      */
-    template <typename ...Cmds>
-    requires
-    (std::is_enum_v<Cmds> && ...) &&
-    ((sizeof(Cmds) == 1) && ...) &&
-    (sizeof...(Cmds) > 0)
+    template <typename... Cmds>
+        requires(std::is_enum_v<Cmds> && ...) && ((sizeof(Cmds) == 1) && ...) && (sizeof...(Cmds) > 0)
     void write_reg(const int reg, const Cmds... cmds);
 
     /** I2C master handles */
@@ -107,5 +105,5 @@ private:
     i2c_master_dev_handle_t dev_handle;
 
     /** I2S handles */
-    i2s_chan_handle_t* tx_handle;
+    i2s_chan_handle_t *tx_handle;
 };

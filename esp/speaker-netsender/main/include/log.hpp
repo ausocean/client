@@ -28,8 +28,10 @@
 
 #include <cstdarg>
 #include <cstdio>
-#include "cc.h"
+
 #include "esp_log_write.h"
+
+#include "cc.h"
 #include "lwip/inet.h"
 #include "lwip/sockets.h"
 

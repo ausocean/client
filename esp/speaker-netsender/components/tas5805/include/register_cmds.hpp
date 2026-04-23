@@ -27,6 +27,7 @@
 #pragma once
 
 #include <stdint.h>
+
 #include "tas5805.hpp"
 
 enum class PAGE : uint8_t {
@@ -39,13 +40,13 @@ enum class BOOK : uint8_t {
 
 enum class CTRL_STATE : uint8_t {
     DEEP_SLEEP = 0b00,
-    SLEEP      = 0b01,
-    HI_Z       = 0b10,
-    PLAY       = 0b11,
+    SLEEP = 0b01,
+    HI_Z = 0b10,
+    PLAY = 0b11,
 };
 
 enum class DAMP_PBTL : uint8_t {
-    BTL_MODE  = 0b0 << 2,
+    BTL_MODE = 0b0 << 2,
     PBTL_MODE = 0b1 << 2,
 };
 

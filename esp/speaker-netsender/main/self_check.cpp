@@ -25,20 +25,21 @@
     <http://www.gnu.org/licenses/>.
 */
 
+#include "freertos/FreeRTOS.h" // IWYU pragma: keep
 #include "include/self_check.hpp"
 
 #include <stddef.h>
 #include <sys/stat.h>
 
-#include "esp_log.h"
-#include "include/globals.h"
-#include "esp_netif.h"
-#include "esp_netif_types.h"
-#include "freertos/FreeRTOS.h" // IWYU pragma: keep
-#include "freertos/projdefs.h"
 #include "esp_err.h"
+#include "esp_log.h"
+#include "esp_netif.h"
 #include "esp_netif_ip_addr.h"
+#include "esp_netif_types.h"
+#include "freertos/projdefs.h"
 #include "freertos/task.h"
+
+#include "include/globals.h"
 #include "tas5805.hpp"
 
 static constexpr auto TAG = "self_check";
@@ -50,7 +51,7 @@ static constexpr auto TAG = "self_check";
  */
 bool is_ethernet_connected()
 {
-    esp_netif_t* eth_netif = esp_netif_get_handle_from_ifkey("ETH_DEF");
+    esp_netif_t *eth_netif = esp_netif_get_handle_from_ifkey("ETH_DEF");
 
     if (eth_netif == NULL) {
         ESP_LOGE(TAG, "Ethernet interface not initialized");
@@ -69,8 +70,7 @@ bool is_ethernet_connected()
         return true;
     }
 
-    ESP_LOGW(TAG, "Ethernet validation failed: Link=%s, IP_Assigned=%s",
-             link_up ? "UP" : "DOWN",
+    ESP_LOGW(TAG, "Ethernet validation failed: Link=%s, IP_Assigned=%s", link_up ? "UP" : "DOWN",
              (ip_info.ip.addr != 0) ? "YES" : "NO");
 
     return false;

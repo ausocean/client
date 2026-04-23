@@ -29,22 +29,22 @@
 #include <cstdint>
 #include <stddef.h>
 
-#include "esp_eth_phy_lan87xx.h"
-
+#include "esp_err.h"
 #include "esp_eth_com.h"
 #include "esp_eth_driver.h"
+#include "esp_eth_mac.h"
+#include "esp_eth_mac_esp.h"
 #include "esp_eth_netif_glue.h"
+#include "esp_eth_phy.h"
+#include "esp_eth_phy_lan87xx.h"
 #include "esp_event.h"
 #include "esp_event_base.h"
 #include "esp_log.h"
 #include "esp_netif.h"
-#include "esp_netif_types.h"
-#include "esp_err.h"
-#include "esp_eth_mac.h"
-#include "esp_eth_mac_esp.h"
-#include "esp_eth_phy.h"
 #include "esp_netif_defaults.h"
 #include "esp_netif_ip_addr.h"
+#include "esp_netif_types.h"
+
 #include "sdkconfig.h"
 
 static const constexpr auto TAG = "ethernet";
@@ -58,10 +58,9 @@ void eth_event_handler(void *, esp_event_base_t, int32_t event_id, void *event_d
         auto eth_handle = *(esp_eth_handle_t *)event_data;
         esp_eth_ioctl(eth_handle, ETH_CMD_G_MAC_ADDR, mac_addr);
         ESP_LOGI(TAG, "Ethernet Link Up");
-        ESP_LOGI(TAG, "Ethernet HW Addr %02x:%02x:%02x:%02x:%02x:%02x",
-                 mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
-    }
-    break;
+        ESP_LOGI(TAG, "Ethernet HW Addr %02x:%02x:%02x:%02x:%02x:%02x", mac_addr[0], mac_addr[1], mac_addr[2],
+                 mac_addr[3], mac_addr[4], mac_addr[5]);
+    } break;
     case ETHERNET_EVENT_DISCONNECTED:
         ESP_LOGI(TAG, "Ethernet Link Down");
         break;
@@ -77,10 +76,9 @@ void eth_event_handler(void *, esp_event_base_t, int32_t event_id, void *event_d
 }
 
 // Event handler for IP_EVENT_ETH_GOT_IP.
-void got_ip_event_handler(void *, esp_event_base_t,
-                          int32_t, void *event_data)
+void got_ip_event_handler(void *, esp_event_base_t, int32_t, void *event_data)
 {
-    auto *event = (ip_event_got_ip_t *) event_data;
+    auto *event = (ip_event_got_ip_t *)event_data;
     const auto *ip_info = &event->ip_info;
 
     ESP_LOGI(TAG, "Ethernet Got IP Address");

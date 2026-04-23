@@ -27,6 +27,7 @@
 #pragma once
 
 #include "esp_err.h"
+
 #include "tas5805.hpp"
 
 // The length of the hashed filename will always be the same
@@ -40,7 +41,7 @@ constexpr const auto HASH_FILENAME_LEN = 69;
  * @param[in] url to get filename for.
  * @param[out] out_filename hashed filename.
  */
-void url_to_filename(const char* url, char* out_filename);
+void url_to_filename(const char *url, char *out_filename);
 
 /**
  * @brief downloads the current var.FileName to the SD card.

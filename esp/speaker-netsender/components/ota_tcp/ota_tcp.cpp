@@ -25,13 +25,16 @@
 */
 
 #include "include/ota_tcp.hpp"
-#include "cc.h"
+
+#include <cstddef>
+
 #include "esp_err.h"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
 #include "esp_system.h"
+
+#include "cc.h"
 #include "lwip/sockets.h"
-#include <cstddef>
 
 constexpr auto OTA_TCP_VERSION = "0.0.1";
 
@@ -54,7 +57,7 @@ void ota_tcp_task(void *)
     address.sin_port = htons(OTA_TCP_PORT);
     address.sin_addr.s_addr = INADDR_ANY;
 
-    if (bind(ota_socket, (struct sockaddr *) &address, sizeof(address)) < 0) {
+    if (bind(ota_socket, (struct sockaddr *)&address, sizeof(address)) < 0) {
         ESP_LOGE(TAG, "failed to bind socket");
         ota_initialised = false;
         close(ota_socket);
@@ -67,7 +70,6 @@ void ota_tcp_task(void *)
     while (true) {
         auto req_socket = accept(ota_socket, NULL, NULL);
         ESP_LOGI(TAG, "OTA triggered, receiving update");
-
 
         auto update_partition = esp_ota_get_next_update_partition(esp_ota_get_running_partition());
         esp_ota_handle_t ota_handle;

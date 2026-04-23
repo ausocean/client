@@ -38,8 +38,7 @@ void eth_event_handler(void *, esp_event_base_t, int32_t event_id, void *event_d
 /**
  * @brief Event handler for IP events.
  */
-void got_ip_event_handler(void *, esp_event_base_t,
-                          int32_t, void *event_data);
+void got_ip_event_handler(void *, esp_event_base_t, int32_t, void *event_data);
 
 /**
  * @brief Initialise ethernet MAC, PHY and TCP/IP.

@@ -1,9 +1,9 @@
 #pragma once
 #include <array>
 #include <cstdio>
+#include <cstring>
 #include <optional>
 #include <string>
-#include <cstring>
 
 #include "esp_err.h"
 #include "esp_log.h"
@@ -28,7 +28,7 @@ namespace var {
 constexpr const auto VAR_ID_VS = "vs";
 constexpr const auto VAR_ID_VOLUME = "Volume";
 constexpr const auto VAR_ID_FILEPATH = "FilePath";
-}
+} // namespace var
 
 constexpr const auto VARIABLES = std::array{
     var::VAR_ID_VS,
@@ -42,7 +42,7 @@ struct device_var_state_t {
     char FilePath[MAX_STR_VAR_LEN];
 };
 
-inline void update_state_member(device_var_state_t &state, const std::string& var_id, const std::string& val)
+inline void update_state_member(device_var_state_t &state, const std::string &var_id, const std::string &val)
 {
     if (var_id == var::VAR_ID_VS) {
         state.vs = static_cast<int32_t>(std::stoi(val));
@@ -54,9 +54,9 @@ inline void update_state_member(device_var_state_t &state, const std::string& va
     }
 }
 
-inline esp_err_t write_vars_to_file(const device_var_state_t &state, const std::string& file_path)
+inline esp_err_t write_vars_to_file(const device_var_state_t &state, const std::string &file_path)
 {
-    FILE* fd = fopen(file_path.c_str(), "w");
+    FILE *fd = fopen(file_path.c_str(), "w");
     if (fd == NULL) {
         return ESP_FAIL;
     }
@@ -78,12 +78,12 @@ inline esp_err_t write_vars_to_file(const device_var_state_t &state, const std::
     return ESP_OK;
 }
 
-inline std::optional<device_var_state_t> read_vars_from_file(const std::string& file_path)
+inline std::optional<device_var_state_t> read_vars_from_file(const std::string &file_path)
 {
     device_var_state_t vars = {};
 
     ESP_LOGI("NETSENDER_VARS", "opening file");
-    FILE* fd = fopen(file_path.c_str(), "r");
+    FILE *fd = fopen(file_path.c_str(), "r");
     if (fd == NULL) {
         return std::nullopt;
     }
@@ -92,7 +92,7 @@ inline std::optional<device_var_state_t> read_vars_from_file(const std::string& 
     // This is longer than we need, however, we don't have a standard
     // YET for how long a variable name can be.
     static char out[2 * MAX_STR_VAR_LEN + 1];
-    char* value = NULL;
+    char *value = NULL;
     while (fgets(out, 2 * MAX_STR_VAR_LEN, fd) != nullptr) {
         if (strlen(out) >= 2 * MAX_STR_VAR_LEN) {
             printf("err line too long for buffer: '%s' (len: %d)\n", out, strlen(out));
@@ -109,7 +109,7 @@ inline std::optional<device_var_state_t> read_vars_from_file(const std::string& 
             break;
         }
         *value = '\0'; // Terminate the first string (name).
-        value++; // Point to the start of the second string (value).
+        value++;       // Point to the start of the second string (value).
 
         ESP_LOGI("NETSENDER_VARS", "got variable: %s = %s", out, value);
         update_state_member(vars, out, value);

@@ -26,7 +26,6 @@
 
 #pragma once
 
-
 /**
  * @brief Initialises SD card.
  */
