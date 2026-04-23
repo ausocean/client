@@ -49,6 +49,7 @@
 #include "sha/sha_core.h"
 #include "soc/clk_tree_defs.h"
 #include "soc/gpio_num.h"
+#include "tas5805.hpp"
 
 static constexpr const auto TAG = "audio";
 

@@ -40,7 +40,6 @@
 #include "esp_netif_ip_addr.h"
 #include "freertos/task.h"
 #include "tas5805.hpp"
-#include "esp_log_color.h"
 
 static constexpr auto TAG = "self_check";
 

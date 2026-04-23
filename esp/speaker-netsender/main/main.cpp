@@ -24,37 +24,34 @@
     <http://www.gnu.org/licenses/>.
 */
 
-// Make the app c++ compatible.
-#include <string>
-#include <string_view>
-extern "C" {
-    void app_main();
-}
+// This must be included before other freertos includes.
+#include "freertos/FreeRTOS.h" // IWYU pragma: keep
 
-#include <stdio.h>
+#include <cstdio>
+#include <cstring>
 #include <string.h>
-#include <array>
-#include <functional>
 #include <string>
 
+#include "esp_err.h"
+#include "esp_log.h"
+#include "freertos/idf_additions.h"
 #include "freertos/projdefs.h"
-#include "netsender.hpp"
-#include "ota_tcp.hpp"
-#include "include/netsender_vars.hpp"
+
 #include "include/audio.hpp"
 #include "include/ethernet.hpp"
-#include "include/sd.hpp"
-#include "include/self_check.hpp"
 #include "include/globals.h"
 #include "include/log.hpp"
-#include "soc/clk_tree_defs.h"
-#include "driver/i2s_types.h"
-#include "esp_err.h"
-#include "freertos/FreeRTOS.h" // IWYU pragma: keep
-#include "freertos/task.h"
-#include "esp_log.h"
+#include "include/netsender_vars.hpp"
+#include "include/sd.hpp"
+#include "include/self_check.hpp"
+#include "netsender.hpp"
+#include "ota_tcp.hpp"
 #include "tas5805.hpp"
-#include "esp_log_color.h"
+
+// Make the app c++ compatible.
+extern "C" {
+void app_main();
+}
 
 // Current version of the speaker.
 static constexpr const auto SPEAKER_VERSION = "0.5.0";
