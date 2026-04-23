@@ -27,25 +27,26 @@
     <http://www.gnu.org/licenses/>.
 */
 
-#include "tas5805.hpp"
+#include "freertos/FreeRTOS.h" // IWYU pragma: keep
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "esp_log.h"
-#include "register_cmds.hpp"
 #include "driver/i2c_master.h"
 #include "driver/i2s_std.h"
 #include "esp_err.h"
-#include "freertos/FreeRTOS.h" // IWYU pragma: keep
-#include "freertos/task.h"
 #include "esp_heap_caps.h"
-#include "freertos/projdefs.h"
-#include "hal/i2c_types.h"
-#include "portmacro.h"
-#include "sdkconfig.h"
+#include "esp_log.h"
 #include "esp_log_color.h"
+#include "freertos/projdefs.h"
+#include "freertos/task.h"
+#include "hal/i2c_types.h"
+
+#include "portmacro.h"
+#include "register_cmds.hpp"
+#include "sdkconfig.h"
+#include "tas5805.hpp"
 
 static const char *TAG = "tas5805";
 
@@ -67,8 +68,7 @@ typedef struct {
     uint32_t subchunk2_size;
 } wav_header_t;
 
-TAS5805::TAS5805(i2c_master_bus_handle_t i2c_bus_handle,
-                 i2s_chan_handle_t *i2s_tx_handle)
+TAS5805::TAS5805(i2c_master_bus_handle_t i2c_bus_handle, i2s_chan_handle_t *i2s_tx_handle)
     : bus_handle(i2c_bus_handle), tx_handle(i2s_tx_handle)
 {
     // Initialise I2C device.
@@ -89,7 +89,7 @@ TAS5805::TAS5805(i2c_master_bus_handle_t i2c_bus_handle,
     write_reg(TAS5805_DEVICE_CTRL_2_REG, CTRL_STATE::HI_Z);
 
     write_reg(TAS5805_DEVICE_CTRL_1_REG, DAMP_PBTL::PBTL_MODE); // Set PBTL MODE.
-    write_reg(TAS5805_AGAIN_REG, ANA_GAIN::DB_0); // Set Analog gain = 0dB.
+    write_reg(TAS5805_AGAIN_REG, ANA_GAIN::DB_0);               // Set Analog gain = 0dB.
 
     // Set device digital volume.
     this->set_volume(DEFAULT_VOLUME);
@@ -123,7 +123,7 @@ bool TAS5805::is_connected()
     return true;
 }
 
-esp_err_t TAS5805::play(const char *path, volatile bool* kill_request)
+esp_err_t TAS5805::play(const char *path, volatile bool *kill_request)
 {
     // Ensure a valid I2S handle exists to send audio.
     if (tx_handle == NULL || *tx_handle == NULL) {
@@ -165,12 +165,10 @@ esp_err_t TAS5805::play(const char *path, volatile bool* kill_request)
     size_t frame_size = sizeof(int16_t) * header.num_channels;
 
     // Buffer for reading from file.
-    int16_t *file_buf = (int16_t *)heap_caps_malloc(samples_per_read * frame_size,
-                                                    MALLOC_CAP_8BIT);
+    int16_t *file_buf = (int16_t *)heap_caps_malloc(samples_per_read * frame_size, MALLOC_CAP_8BIT);
     // Buffer for writing to I2S.
     // NOTE: The I2S buffer will always be stereo, regardless of the file type.
-    int16_t *i2s_buf = (int16_t *)heap_caps_malloc(
-                           samples_per_read * 2 * sizeof(int16_t), MALLOC_CAP_DMA);
+    int16_t *i2s_buf = (int16_t *)heap_caps_malloc(samples_per_read * 2 * sizeof(int16_t), MALLOC_CAP_DMA);
 
     // Verify that buffers got allocated successfully.
     if (!file_buf || !i2s_buf) {
@@ -189,9 +187,7 @@ esp_err_t TAS5805::play(const char *path, volatile bool* kill_request)
     size_t samples_read;
     size_t bytes_written;
 
-    while (
-        (samples_read = fread(file_buf, frame_size, samples_per_read, f)) > 0
-    ) {
+    while ((samples_read = fread(file_buf, frame_size, samples_per_read, f)) > 0) {
         if (header.num_channels == 1) {
             // We need to fill every second sample (right-channel), with a
             // copy of the left channel audio, since the original file is mono,
@@ -207,8 +203,7 @@ esp_err_t TAS5805::play(const char *path, volatile bool* kill_request)
         }
 
         // Write audio to the amplifier.
-        i2s_channel_write(*tx_handle, i2s_buf, samples_read * 2 * sizeof(int16_t),
-                          &bytes_written, portMAX_DELAY);
+        i2s_channel_write(*tx_handle, i2s_buf, samples_read * 2 * sizeof(int16_t), &bytes_written, portMAX_DELAY);
 
         if (kill_request && *kill_request) {
             ESP_LOGI("AUDIO", "Kill request received, stopping playback.");
@@ -218,8 +213,7 @@ esp_err_t TAS5805::play(const char *path, volatile bool* kill_request)
 
     // Push final silence to clear the amp's pipeline.
     memset(i2s_buf, 0, 512 * 4);
-    i2s_channel_write(*tx_handle, i2s_buf, 512 * 4, &bytes_written,
-                      pdMS_TO_TICKS(100));
+    i2s_channel_write(*tx_handle, i2s_buf, 512 * 4, &bytes_written, pdMS_TO_TICKS(100));
 
     free(file_buf);
     free(i2s_buf);
@@ -276,18 +270,12 @@ void TAS5805::write_reg(const int reg, const uint8_t cmd)
     ESP_ERROR_CHECK(i2c_master_transmit(dev_handle, data, 2, 50));
 }
 
-template <typename ...Cmd>
-requires
-(std::is_enum_v<Cmd> && ...) &&
-((sizeof(Cmd) == 1) && ...) &&
-(sizeof...(Cmd) > 0)
+template <typename... Cmd>
+    requires(std::is_enum_v<Cmd> && ...) && ((sizeof(Cmd) == 1) && ...) && (sizeof...(Cmd) > 0)
 void TAS5805::write_reg(const int reg, const Cmd... cmds)
 {
     const uint8_t cmd = (static_cast<uint8_t>(cmds) | ...);
     write_reg(reg, cmd);
 }
 
-TAS5805::~TAS5805()
-{
-    delete tx_handle;
-}
+TAS5805::~TAS5805() { delete tx_handle; }

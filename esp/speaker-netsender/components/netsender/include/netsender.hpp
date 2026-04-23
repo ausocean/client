@@ -29,34 +29,35 @@
 
 #pragma once
 
+#include <functional>
+#include <optional>
 #include <stddef.h>
 #include <stdint.h>
-#include <optional>
-#include <functional>
 #include <string>
 
-#include "sdkconfig.h"
 #include "esp_err.h"
 
-constexpr const auto NETSENDER_MAC_SIZE       = 18;
-constexpr const auto NETSENDER_WIFI_SIZE      = 80;
-constexpr const auto NETSENDER_PIN_SIZE       = 4;
-constexpr const auto NETSENDER_IO_SIZE        = (CONFIG_NETSENDER_MAX_PINS * NETSENDER_PIN_SIZE);
-constexpr const auto NETSENDER_MAX_HANDLERS   = 2;
-constexpr const auto NETSENDER_VERSION        = "0.1.0";
+#include "sdkconfig.h"
+
+constexpr const auto NETSENDER_MAC_SIZE = 18;
+constexpr const auto NETSENDER_WIFI_SIZE = 80;
+constexpr const auto NETSENDER_PIN_SIZE = 4;
+constexpr const auto NETSENDER_IO_SIZE = (CONFIG_NETSENDER_MAX_PINS * NETSENDER_PIN_SIZE);
+constexpr const auto NETSENDER_MAX_HANDLERS = 2;
+constexpr const auto NETSENDER_VERSION = "0.1.0";
 
 // Device modes.
 namespace netsender_mode {
 constexpr auto ONLINE = "Normal";
 constexpr auto OFFLINE = "Offline";
-};
+}; // namespace netsender_mode
 
 // Device requests.
 enum netsender_request_type_t {
     NETSENDER_REQUEST_TYPE_CONFIG = 0,
-    NETSENDER_REQUEST_TYPE_POLL   = 1,
-    NETSENDER_REQUEST_TYPE_ACT    = 2,
-    NETSENDER_REQUEST_TYPE_VARS   = 3,
+    NETSENDER_REQUEST_TYPE_POLL = 1,
+    NETSENDER_REQUEST_TYPE_ACT = 2,
+    NETSENDER_REQUEST_TYPE_VARS = 3,
 };
 
 // Netsender request endpoints.
@@ -64,24 +65,24 @@ namespace netsender_endpoint {
 static constexpr const auto CONFIG = "/config";
 static constexpr const auto POLL = "/poll";
 static constexpr const auto VARS = "/vars";
-};
+}; // namespace netsender_endpoint
 
 // Service response codes.
 enum netsender_rc_t {
-    NETSENDER_RC_OK      = 0,
-    NETSENDER_RC_UPDATE  = 1,
-    NETSENDER_RC_REBOOT  = 2,
-    NETSENDER_RC_DEBUG   = 3,
+    NETSENDER_RC_OK = 0,
+    NETSENDER_RC_UPDATE = 1,
+    NETSENDER_RC_REBOOT = 2,
+    NETSENDER_RC_DEBUG = 3,
     NETSENDER_RC_UPGRADE = 4,
-    NETSENDER_RC_ALARM   = 5,
-    NETSENDER_RC_TEST    = 6
+    NETSENDER_RC_ALARM = 5,
+    NETSENDER_RC_TEST = 6
 };
 
 // Boot codes.
 enum netsender_boot_code_t {
     NETSENDER_BOOT_CODE_NORMAL = 0x00, // Normal reboot (operator requested).
-    NETSENDER_BOOT_CODE_WIFI   = 0x01, // Reboot due to error when trying to disconnect from Wifi.
-    NETSENDER_BOOT_CODE_ALARM  = 0x02, // Alarm auto-restart.
+    NETSENDER_BOOT_CODE_WIFI = 0x01,   // Reboot due to error when trying to disconnect from Wifi.
+    NETSENDER_BOOT_CODE_ALARM = 0x02,  // Alarm auto-restart.
 };
 
 /**
@@ -113,18 +114,18 @@ struct netsender_configuration_t {
 
 // Pin represents a pin name and value and optional POST data.
 struct netsender_pin_t {
-    char name [NETSENDER_PIN_SIZE];
-    std::function <std::optional<int64_t>()> read;
+    char name[NETSENDER_PIN_SIZE];
+    std::function<std::optional<int64_t>()> read;
     std::optional<int64_t> value;
-    uint8_t * data;
+    uint8_t *data;
 };
 
 // extract_json gets a string or integer value from JSON.
 // NB: This is NOT a general-purpose JSON parser.
-bool netsender_extract_json(const std::string& json, const char* name, std::string& value);
+bool netsender_extract_json(const std::string &json, const char *name, std::string &value);
 
 class Netsender {
-public:
+  public:
     /**
      * @brief initialise the netsender client.
      *
@@ -140,7 +141,7 @@ public:
     /**
      * @brief append a read function and associated pin.
      */
-    esp_err_t register_input(char* pin_name, std::function<std::optional<int64_t>()> read_func);
+    esp_err_t register_input(char *pin_name, std::function<std::optional<int64_t>()> read_func);
 
     /**
      * @brief register a callback to handle variable parsing.
@@ -170,8 +171,7 @@ public:
 
     ~Netsender();
 
-private:
-
+  private:
     /**
      * Netsender has been configured.
      */
@@ -190,7 +190,7 @@ private:
     /**
      * @appends a query parameter for a pin to a url.
      */
-    void append_pin_to_url(char* url, netsender_pin_t &pin);
+    void append_pin_to_url(char *url, netsender_pin_t &pin);
 
     /**
      * Netsender Configuration.

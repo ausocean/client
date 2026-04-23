@@ -27,36 +27,37 @@
     <http://www.gnu.org/licenses/>.
 */
 
-#include "netsender.hpp"
+#include "freertos/FreeRTOS.h" // IWYU pragma: keep
 
-#include <stdio.h>
-#include <string.h>
-#include <sys/param.h>
-#include <stdlib.h>
 #include <ctype.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <string>
+#include <sys/param.h>
 
 #include "esp_err.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
+#include "esp_log_color.h"
 #include "esp_mac.h"
 #include "esp_system.h"
-#include "freertos/FreeRTOS.h" // IWYU pragma: keep
+#include "esp_timer.h"
+#include "esp_tls.h"
+#include "esp_tls_errors.h"
 #include "freertos/projdefs.h"
 #include "freertos/task.h"
+
+#include "netsender.hpp"
 #include "nvs.h"
 #include "nvs_flash.h"
 #include "portmacro.h"
 #include "sdkconfig.h"
-#include "esp_timer.h"
-#include "esp_tls.h"
-#include "esp_log_color.h"
-#include "esp_tls_errors.h"
 
 static constexpr const auto MAX_HTTP_RECV_BUFFER = 512;
-static constexpr const auto MAX_URL_LEN          = 256;
-static constexpr const auto STORAGE_NAMESPACE    = "netsender";
-static constexpr const auto CONFIG_NVS_KEY       = "config";
+static constexpr const auto MAX_URL_LEN = 256;
+static constexpr const auto STORAGE_NAMESPACE = "netsender";
+static constexpr const auto CONFIG_NVS_KEY = "config";
 
 static constexpr const char *TAG = "netsender";
 
@@ -67,11 +68,11 @@ static StaticTask_t xTaskBuffer;
 // Forward Declarations.
 
 // pad_copy copies a string, padding with null characters
-void pad_copy(char * dst, const char * src, size_t size);
+void pad_copy(char *dst, const char *src, size_t size);
 
 // check_pins returns the number of valid comma-separated pin names, or
 // -1 if any pin is invalid or the number of pins exceeds MAX_PINS.
-int check_pins(const char * names);
+int check_pins(const char *names);
 
 // is_valid_pin_name returns true if the given name is the letter A,B, D,
 // T, or X followed by one or two digits, or false otherwise. If len is
@@ -87,7 +88,8 @@ Netsender::Netsender()
     uint8_t mac[6];
     esp_mac_type_t mac_type = ESP_MAC_ETH;
     ESP_ERROR_CHECK(esp_read_mac(mac, mac_type));
-    snprintf(this->mac, MAC_LENGTH + 1, "%02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    snprintf(this->mac, MAC_LENGTH + 1, "%02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1], mac[2], mac[3], mac[4],
+             mac[5]);
 
     // Initialise Non-Volatile Storage.
     err = nvs_flash_init();
@@ -104,7 +106,6 @@ Netsender::Netsender()
     } else {
         this->configured = true;
     }
-
 }
 
 esp_err_t Netsender::read_nvs_config()
@@ -181,7 +182,8 @@ constexpr void Netsender::print_config() const
     }
 }
 
-esp_err_t Netsender::register_input(char pin_name[NETSENDER_PIN_SIZE], std::function<std::optional<int64_t>()> read_func)
+esp_err_t Netsender::register_input(char pin_name[NETSENDER_PIN_SIZE],
+                                    std::function<std::optional<int64_t>()> read_func)
 {
     if (input_cnt >= CONFIG_NETSENDER_MAX_PINS) {
         ESP_LOGE(TAG, "cannot register more than %d inputs", CONFIG_NETSENDER_MAX_PINS);
@@ -209,10 +211,7 @@ esp_err_t Netsender::register_variable_parser(std::function<esp_err_t(std::strin
     return ESP_OK;
 }
 
-void Netsender::set_varsum(const int32_t varsum)
-{
-    this->varsum = varsum;
-}
+void Netsender::set_varsum(const int32_t varsum) { this->varsum = varsum; }
 
 void Netsender::run()
 {
@@ -239,28 +238,28 @@ void Netsender::run()
         }
 
         vTaskDelay(pdMS_TO_TICKS(10));
-
     }
 }
 
 void Netsender::task_wrapper(void *params)
 {
-    Netsender* instance = static_cast<Netsender*>(params);
+    Netsender *instance = static_cast<Netsender *>(params);
     instance->run();
 }
 
 void Netsender::start()
 {
     // Structure that will hold the TCB of the task being created
-    xTaskCreateStatic(this->task_wrapper, "NetSender", CONFIG_NETSENDER_TASK_STACK_DEPTH, this, 0, ns_stack, &xTaskBuffer);
+    xTaskCreateStatic(this->task_wrapper, "NetSender", CONFIG_NETSENDER_TASK_STACK_DEPTH, this, 0, ns_stack,
+                      &xTaskBuffer);
 }
 
 Netsender::~Netsender() {}
 
 esp_err_t http_event_handler(esp_http_client_event_t *evt)
 {
-    static char *output_buffer;  // Buffer to store response of http request from event handler
-    static int output_len;       // Stores number of bytes read
+    static char *output_buffer; // Buffer to store response of http request from event handler
+    static int output_len;      // Stores number of bytes read
     switch (evt->event_id) {
     case HTTP_EVENT_ERROR:
         ESP_LOGD(TAG, "HTTP_EVENT_ERROR");
@@ -291,7 +290,7 @@ esp_err_t http_event_handler(esp_http_client_event_t *evt)
                 // The last byte in evt->user_data is kept for the NULL character in case of out-of-bound access.
                 copy_len = MIN(evt->data_len, (CONFIG_NETSENDER_MAX_HTTP_OUTPUT_BUFFER - output_len));
                 if (copy_len) {
-                    memcpy((char*)evt->user_data + output_len, evt->data, copy_len);
+                    memcpy((char *)evt->user_data + output_len, evt->data, copy_len);
                 }
             } else {
                 ESP_LOGE(TAG, "client requests must attach user_data array to handle response body");
@@ -341,20 +340,17 @@ esp_err_t Netsender::req_config()
 
     // Create request url.
     snprintf(url, MAX_URL_LEN,
-             "%s%s"           // Host and Endpoint
-             "?vn=%s"         // Version
-             "&ma=%s"         // MAC
-             "&dk=0"         // Device Key
+             "%s%s"   // Host and Endpoint
+             "?vn=%s" // Version
+             "&ma=%s" // MAC
+             "&dk=0"  // Device Key
              // TODO: Add Local IP
              // "&la=%d.%d.%d.%d" // IP Address
-             "&ut=%lld"        // Uptime
-             "&md=%s"         // Mode
-             "&er=",        // Error
-             CONFIG_NETSENDER_REMOTE_HOST,
-             netsender_endpoint::CONFIG,
-             NETSENDER_VERSION, this->mac,
-             uptime(), netsender_mode::ONLINE
-            );
+             "&ut=%lld" // Uptime
+             "&md=%s"   // Mode
+             "&er=",    // Error
+             CONFIG_NETSENDER_REMOTE_HOST, netsender_endpoint::CONFIG, NETSENDER_VERSION, this->mac, uptime(),
+             netsender_mode::ONLINE);
 
     // Initialise the request.
     esp_http_client_config_t http_config = {
@@ -434,7 +430,7 @@ esp_err_t Netsender::req_config()
     return ESP_OK;
 }
 
-void Netsender::append_pin_to_url(char* url, netsender_pin_t &pin)
+void Netsender::append_pin_to_url(char *url, netsender_pin_t &pin)
 {
     auto cur_len = strlen(url);
 
@@ -446,10 +442,7 @@ void Netsender::append_pin_to_url(char* url, netsender_pin_t &pin)
     // Use ? seperator for first param, and & for all others.
     auto sep = strchr(url, '?') == NULL ? "?" : "&";
 
-    snprintf(url + cur_len, (MAX_URL_LEN + 1) - cur_len,
-             "%s%s=%lld",
-             sep, pin.name, pin.value.value()
-            );
+    snprintf(url + cur_len, (MAX_URL_LEN + 1) - cur_len, "%s%s=%lld", sep, pin.name, pin.value.value());
 }
 
 esp_err_t Netsender::req_poll()
@@ -460,14 +453,11 @@ esp_err_t Netsender::req_poll()
 
     // Create request url.
     snprintf(url, sizeof(url),
-             "%s%s"    // Domain and Enpoint.
-             "?ma=%s"  // MAC Address.
-             "&dk=%s"  // Device Key.
+             "%s%s"      // Domain and Enpoint.
+             "?ma=%s"    // MAC Address.
+             "&dk=%s"    // Device Key.
              "&ut=%lld", // Uptime.
-             CONFIG_NETSENDER_REMOTE_HOST,
-             netsender_endpoint::POLL,
-             this->mac, this->config.dkey, uptime()
-            );
+             CONFIG_NETSENDER_REMOTE_HOST, netsender_endpoint::POLL, this->mac, this->config.dkey, uptime());
 
     for (auto i = 0; i < input_cnt; i++) {
         auto &pin = inputs[i];
@@ -541,11 +531,8 @@ esp_err_t Netsender::req_vars()
     snprintf(url, sizeof(url),
              "%s%s"    // Domain and Enpoint.
              "?ma=%s"  // MAC Address.
-             "&dk=%s",  // Device Key.
-             CONFIG_NETSENDER_REMOTE_HOST,
-             netsender_endpoint::VARS,
-             this->mac, this->config.dkey
-            );
+             "&dk=%s", // Device Key.
+             CONFIG_NETSENDER_REMOTE_HOST, netsender_endpoint::VARS, this->mac, this->config.dkey);
 
     // Initialise the request.
     esp_http_client_config_t http_config = {
@@ -631,12 +618,9 @@ esp_err_t Netsender::handle_response_code(std::string code)
     return ESP_OK;
 }
 
-int64_t Netsender::uptime() const
-{
-    return esp_timer_get_time() / 1000000;
-}
+int64_t Netsender::uptime() const { return esp_timer_get_time() / 1000000; }
 
-bool netsender_extract_json(const std::string & json, const char* name, std::string & value)
+bool netsender_extract_json(const std::string &json, const char *name, std::string &value)
 {
     size_t start = json.find(std::string("\"") + name + "\"");
     if (start == std::string::npos) {
@@ -654,8 +638,17 @@ bool netsender_extract_json(const std::string & json, const char* name, std::str
 
     size_t finish;
     switch (json[start]) {
-    case '-': case '0': case '1': case '2': case '3': case '4':
-    case '5': case '6': case '7': case '8': case '9':
+    case '-':
+    case '0':
+    case '1':
+    case '2':
+    case '3':
+    case '4':
+    case '5':
+    case '6':
+    case '7':
+    case '8':
+    case '9':
         finish = json.find(',', start);
         if (finish == std::string::npos) {
             finish = json.find('}', start);
@@ -677,23 +670,23 @@ bool netsender_extract_json(const std::string & json, const char* name, std::str
     return true;
 }
 
-void pad_copy(char * dst, const char * src, size_t size)
+void pad_copy(char *dst, const char *src, size_t size)
 {
     int ii = 0;
     for (; ii < size - 1 && ii < strlen(src); ii++) {
         dst[ii] = src[ii];
     }
     for (; ii < size; ii++) {
-        dst[ii]  = '\0';
+        dst[ii] = '\0';
     }
 }
 
-int check_pins(const char * names)
+int check_pins(const char *names)
 {
     const char *start = names;
     int ii = 0;
     while (*start != '\0') {
-        const char * finish = strchr(start, ',');
+        const char *finish = strchr(start, ',');
         if (finish == NULL) {
             if (!is_valid_pin_name(start, 0)) {
                 return -1;

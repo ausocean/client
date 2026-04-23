@@ -10,7 +10,7 @@ UseTab: Never
 
 PointerAlignment: Right
 
-AllowShortBlocksOnASingleLine: Always
+AllowShortBlocksOnASingleLine: Empty
 AllowShortFunctionsOnASingleLine: All
 AllowShortIfStatementsOnASingleLine: WithoutElse
 AllowShortLoopsOnASingleLine: true

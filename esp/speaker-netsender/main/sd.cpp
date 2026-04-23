@@ -26,11 +26,12 @@
 
 #include "driver/sdspi_host.h"
 #include "driver/spi_common.h"
-#include "esp_vfs_fat.h"
-#include "sd_protocol_types.h"
-#include "include/globals.h"
 #include "esp_err.h"
+#include "esp_vfs_fat.h"
 #include "hal/spi_types.h"
+
+#include "include/globals.h"
+#include "sd_protocol_types.h"
 #include "sdkconfig.h"
 #include "soc/gpio_num.h"
 
