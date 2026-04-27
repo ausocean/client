@@ -1,0 +1,28 @@
+name: ESP-IDF Component Tests
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  test-pipi:
+    name: Run Pipi Tests
+    runs-on: ubuntu-latest
+    container: espressif/idf:release-v6.0
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build and Run Host Tests
+        shell: bash
+        run: |
+          . $IDF_PATH/export.sh
+          cd esp/speaker-netsender/components/pipi/host_tests/test_pipi
+          idf.py --preview set-target linux
+          idf.py build
+          ./build/test_pipi.elf
