@@ -23,7 +23,6 @@
     along with NetSender in gpl.txt.  If not, see
     <http://www.gnu.org/licenses/>.
 */
-
 #include "gtest/gtest.h"
 
 extern "C" void app_main(void)
