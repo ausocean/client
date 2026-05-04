@@ -21,6 +21,7 @@ jobs:
       - name: Build and Run Host Tests
         shell: bash
         run: |
+          export IDF_TOOLCHAIN=clang
           . $IDF_PATH/export.sh
           cd esp/speaker-netsender/components/pipi/host_tests/test_pipi
           idf.py --preview set-target linux
