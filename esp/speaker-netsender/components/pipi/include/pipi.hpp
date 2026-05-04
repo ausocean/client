@@ -60,16 +60,6 @@ class Entry {
      *
      * @param[in] ts unix timestamp (seconds)
      * @param[in] level enum log level
-     * @param[in] msg format string
-     * @param[in] args format arguments
-     */
-    Entry(const int64_t ts, const Level level, const char *fmt, va_list args);
-
-    /**
-     * @brief constructor with timestamp, log level and message.
-     *
-     * @param[in] ts unix timestamp (seconds)
-     * @param[in] level enum log level
      * @param[in] msg log message
      */
     Entry(const int64_t ts, const Level level, const char *msg);
@@ -141,8 +131,7 @@ class FileLogger {
      * @param[in] msg format string for log message.
      * @param[in] args arguments for format string.
      */
-    esp_err_t info(const char *msg, va_list args);
-    esp_err_t info(const char *msg);
+    esp_err_t info(const char *msg, ...);
 
     /**
      * @brief Log a warn level log.
@@ -150,8 +139,7 @@ class FileLogger {
      * @param[in] msg format string for log message.
      * @param[in] args arguments for format string.
      */
-    esp_err_t warn(const char *msg, va_list args);
-    esp_err_t warn(const char *msg);
+    esp_err_t warn(const char *msg, ...);
 
     /**
      * @brief Log an error level log.
@@ -159,8 +147,7 @@ class FileLogger {
      * @param[in] msg format string for log message.
      * @param[in] args arguments for format string.
      */
-    esp_err_t error(const char *msg, va_list args);
-    esp_err_t error(const char *msg);
+    esp_err_t error(const char *msg, ...);
 
     /**
      * @brief Log a fatal level log.
@@ -168,8 +155,7 @@ class FileLogger {
      * @param[in] msg format string for log message.
      * @param[in] args arguments for format string.
      */
-    esp_err_t fatal(const char *msg, va_list args);
-    esp_err_t fatal(const char *msg);
+    esp_err_t fatal(const char *msg, ...);
 
     /**
      * @brief maximum path length.

@@ -15,7 +15,7 @@
 
 namespace Pipi {
 // Forward declarations
-void assert_log_level(std::ifstream& f, int level);
+void assert_log_level(std::ifstream &f, int level);
 
 class TestEntry : public testing::Test {
   protected:
@@ -126,17 +126,33 @@ TEST_F(TestFileLogger, Write_Logs_Direct)
     ASSERT_EQ(err, ESP_OK);
     err = p.log(Level::INFO, "This is an INFO log with no formatting");
     ASSERT_EQ(err, ESP_OK);
+    err = p.info("This is an INFO log with an int (%d)", TEST_INT);
+    ASSERT_EQ(err, ESP_OK);
+    err = p.info("This is an INFO log with no formatting");
+    ASSERT_EQ(err, ESP_OK);
     err = p.log(Level::WARN, "This is a WARN log with an int (%d)", TEST_INT);
     ASSERT_EQ(err, ESP_OK);
     err = p.log(Level::WARN, "This is a WARN log with no formatting");
+    ASSERT_EQ(err, ESP_OK);
+    err = p.warn("This is a WARN log with an int (%d)", TEST_INT);
+    ASSERT_EQ(err, ESP_OK);
+    err = p.warn("This is a WARN log with no formatting");
     ASSERT_EQ(err, ESP_OK);
     err = p.log(Level::ERROR, "This is an ERROR log with an int (%d)", TEST_INT);
     ASSERT_EQ(err, ESP_OK);
     err = p.log(Level::ERROR, "This is an ERROR log with no formatting");
     ASSERT_EQ(err, ESP_OK);
+    err = p.error("This is an ERROR log with an int (%d)", TEST_INT);
+    ASSERT_EQ(err, ESP_OK);
+    err = p.error("This is an ERROR log with no formatting");
+    ASSERT_EQ(err, ESP_OK);
     err = p.log(Level::FATAL, "This is a FATAL log with an int (%d)", TEST_INT);
     ASSERT_EQ(err, ESP_OK);
     err = p.log(Level::FATAL, "This is a FATAL log with no formatting");
+    ASSERT_EQ(err, ESP_OK);
+    err = p.fatal("This is a FATAL log with an int (%d)", TEST_INT);
+    ASSERT_EQ(err, ESP_OK);
+    err = p.fatal("This is a FATAL log with no formatting");
     ASSERT_EQ(err, ESP_OK);
 
     // This is required because logfiles are timestamped, and will overwrite itself if called too quickly.
@@ -147,21 +163,22 @@ TEST_F(TestFileLogger, Write_Logs_Direct)
     ASSERT_TRUE(p.prev_file.is_open());
 
     // Assert the log levels.
-    for (auto i = 0; i < 2; i++) {
+    for (auto i = 0; i < 4; i++) {
         assert_log_level(p.prev_file, Level::INFO);
     }
-    for (auto i = 0; i < 2; i++) {
+    for (auto i = 0; i < 4; i++) {
         assert_log_level(p.prev_file, Level::WARN);
     }
-    for (auto i = 0; i < 2; i++) {
+    for (auto i = 0; i < 4; i++) {
         assert_log_level(p.prev_file, Level::ERROR);
     }
-    for (auto i = 0; i < 2; i++) {
+    for (auto i = 0; i < 4; i++) {
         assert_log_level(p.prev_file, Level::FATAL);
     }
 }
 
-void assert_log_level(std::ifstream& f, int level) {
+void assert_log_level(std::ifstream &f, int level)
+{
     constexpr auto SEARCH_LEN = 1024;
     f.ignore(SEARCH_LEN, ','); // Skip over timestamp
     char got[SEARCH_LEN];

@@ -44,18 +44,6 @@
 // Logging Tag.
 static constexpr auto TAG = "Pipi";
 
-Pipi::Entry::Entry(const int64_t ts, const Level level, const char *fmt, va_list args) : timestamp(ts), level(level)
-{
-    char msg[Entry::MAX_LOG_LENGTH];
-    auto written = vsnprintf(msg, Entry::MAX_LOG_LENGTH, fmt, args);
-    if (written < 0) {
-        ESP_LOGE(TAG, "unable to write message to Entry");
-        return;
-    }
-
-    Entry(ts, level, msg);
-}
-
 Pipi::Entry::Entry(const int64_t ts, const Level level, const char *msg) : timestamp(ts), level(level), data(msg) {}
 
 esp_err_t Pipi::Entry::write(std::ostream &stream)
@@ -115,30 +103,21 @@ esp_err_t Pipi::FileLogger::make_path(const char *path)
 Pipi::FileLogger::FileLogger(const char *path) : ready(false)
 {
     // Validate the path is a directory.
-    struct stat buffer;
+    const char *resolved = (path != nullptr && path[0] != '\0') ? path : DEFAULT_PATH;
+    struct stat buffer{};
     errno = 0;
-    auto status = stat(path, &buffer);
+    auto status = stat(resolved, &buffer);
 
-    if (status == -1 && errno == ENOENT && strlen(path) > 0) {
+    if (status == 0 && S_ISDIR(buffer.st_mode)) {
+        snprintf(this->path, sizeof(this->path), "%s", resolved);
+    } else if (status == -1 && errno == ENOENT) {
         // Directory doesn't exist so create it.
         auto err = make_path(path);
         if (err != ESP_OK) {
             ESP_LOGE(TAG, "unable to create path");
             return;
         }
-        strncpy(this->path, path, this->MAX_PATH_LENGTH);
-    } else if (S_ISDIR(buffer.st_mode)) {
-        // The given path is a directory so use it.
-        strncpy(this->path, path, this->MAX_PATH_LENGTH);
-    } else {
-        // The given path points to a file, so use the default.
-        ESP_LOGW(TAG, "path for FileLogger must be a directory, defaulting to %s", DEFAULT_PATH);
-        auto err = make_path(DEFAULT_PATH);
-        if (err != ESP_OK) {
-            ESP_LOGE(TAG, "unable to create path");
-            return;
-        }
-        strncpy(this->path, DEFAULT_PATH, this->MAX_PATH_LENGTH);
+        strncpy(this->path, resolved, this->MAX_PATH_LENGTH);
     }
 
     // Start a new logging file.
@@ -178,15 +157,30 @@ esp_err_t Pipi::FileLogger::new_file()
     return ESP_OK;
 }
 
-esp_err_t Pipi::FileLogger::info(const char *msg) { return this->log(Level::INFO, msg); }
-esp_err_t Pipi::FileLogger::warn(const char *msg) { return this->log(Level::WARN, msg); }
-esp_err_t Pipi::FileLogger::error(const char *msg) { return this->log(Level::ERROR, msg); }
-esp_err_t Pipi::FileLogger::fatal(const char *msg) { return this->log(Level::FATAL, msg); }
-
-esp_err_t Pipi::FileLogger::info(const char *msg, va_list args) { return this->log(Level::INFO, msg, args); }
-esp_err_t Pipi::FileLogger::warn(const char *msg, va_list args) { return this->log(Level::WARN, msg, args); }
-esp_err_t Pipi::FileLogger::error(const char *msg, va_list args) { return this->log(Level::ERROR, msg, args); }
-esp_err_t Pipi::FileLogger::fatal(const char *msg, va_list args) { return this->log(Level::FATAL, msg, args); }
+esp_err_t Pipi::FileLogger::info(const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    return this->log(Level::INFO, fmt, args);
+}
+esp_err_t Pipi::FileLogger::warn(const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    return this->log(Level::WARN, fmt, args);
+}
+esp_err_t Pipi::FileLogger::error(const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    return this->log(Level::ERROR, fmt, args);
+}
+esp_err_t Pipi::FileLogger::fatal(const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    return this->log(Level::FATAL, fmt, args);
+}
 
 esp_err_t Pipi::FileLogger::log(const Pipi::Level level, const char *fmt, ...)
 {
