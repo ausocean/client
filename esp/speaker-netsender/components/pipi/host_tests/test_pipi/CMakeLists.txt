@@ -14,7 +14,10 @@ include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(test_pipi)
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-    target_compile_options(gtest PRIVATE -Wno-unknown-warning-option)
+    target_compile_options(gtest PRIVATE
+        "-Wno-unknown-warning-option"
+        "-Wno-character-conversion"
+    )
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_options(gtest PRIVATE -Wno-character-conversion)
 endif()

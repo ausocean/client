@@ -79,7 +79,7 @@ class TestFileLogger : public testing::Test {
     void TearDown() override
     {
         chdir("../");
-        // std::filesystem::remove_all(TEST_DIR);
+        std::filesystem::remove_all(TEST_DIR);
     }
 };
 

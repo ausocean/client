@@ -75,6 +75,12 @@ esp_err_t Pipi::Entry::write(std::ostream &stream)
 
 esp_err_t Pipi::FileLogger::make_path(const char *path)
 {
+    auto path_len = strnlen(path, MAX_PATH_LENGTH + 1);
+    if (path_len > MAX_PATH_LENGTH - 1) {
+        ESP_LOGE(TAG, "path too long");
+        return ESP_FAIL;
+    }
+
     auto making = true;
     char parent[Pipi::FileLogger::MAX_PATH_LENGTH];
     errno = 0;
@@ -112,7 +118,7 @@ Pipi::FileLogger::FileLogger(const char *path) : ready(false)
         snprintf(this->path, sizeof(this->path), "%s", resolved);
     } else if (status == -1 && errno == ENOENT) {
         // Directory doesn't exist so create it.
-        auto err = make_path(path);
+        auto err = make_path(resolved);
         if (err != ESP_OK) {
             ESP_LOGE(TAG, "unable to create path");
             return;
