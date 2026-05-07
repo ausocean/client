@@ -13,6 +13,10 @@ set(COMPONENTS main pipi)
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(test_pipi)
 
-target_compile_options(gtest PRIVATE -Wno-character-conversion)
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    target_compile_options(gtest PRIVATE -Wno-unknown-warning-option)
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(gtest PRIVATE -Wno-character-conversion)
+endif()
 
 set(CMAKE_CXX_STANDARD 23)
