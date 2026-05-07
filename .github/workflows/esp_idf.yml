@@ -10,7 +10,7 @@ jobs:
   test-pipi:
     name: Run Pipi Tests
     runs-on: ubuntu-latest
-    container: espressif/idf:release-v6.0
+    container: espressif/idf:latest
 
     steps:
       - name: Checkout Repository
@@ -18,10 +18,16 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Setup Custom Clang Toolchain
+        run: |
+          apt-get update && apt-get install -y clang lld llvm
+          cat .github/workflows/toolchain-clang-linux.cmake > $IDF_PATH/tools/cmake/toolchain-clang-linux.cmake
+
       - name: Build and Run Host Tests
         shell: bash
+        env:
+          IDF_TOOLCHAIN: clang
         run: |
-          export IDF_TOOLCHAIN=clang
           . $IDF_PATH/export.sh
           cd esp/speaker-netsender/components/pipi/host_tests/test_pipi
           idf.py --preview set-target linux

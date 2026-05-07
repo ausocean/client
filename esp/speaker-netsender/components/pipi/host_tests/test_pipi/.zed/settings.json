@@ -1,0 +1,27 @@
+{
+    "tab_size": 4,
+    "format_on_save": "on",
+    "languages": {
+        "C++": {
+            "formatter": "language_server",
+            "language_servers": ["clangd"],
+        },
+    },
+    "lsp": {
+        "clangd": {
+            "binary": {
+                "path": "/home/david/.espressif/tools/esp-clang/esp-20.1.1_20250829/esp-clang/bin/clangd",
+                "arguments": [
+                    "--compile-commands-dir=build",
+                    "--query-driver=/home/david/.espressif/tools/**,/usr/bin/gcc,/usr/bin/g++,/usr/bin/clang*",
+                    "--background-index",
+                    "--all-scopes-completion",
+                    "--clang-tidy",
+                    "--header-insertion=iwyu",
+                    "--header-insertion-decorators",
+                    "--include-cleaner-stdlib",
+                ],
+            },
+        },
+    },
+}
