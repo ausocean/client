@@ -7,9 +7,9 @@ written by Adafruit Industries
 #define DHT_H
 
 #if ARDUINO >= 100
- #include "Arduino.h"
+#include "Arduino.h"
 #else
- #include "WProgram.h"
+#include "WProgram.h"
 #endif
 
 #include "sensor.h"
@@ -26,11 +26,15 @@ written by Adafruit Industries
 
 // Setup debug printing macros.
 #ifdef DHT_DEBUG
-  #define DEBUG_PRINT(...) { DEBUG_PRINTER.print(__VA_ARGS__); }
-  #define DEBUG_PRINTLN(...) { DEBUG_PRINTER.println(__VA_ARGS__); }
+#define DEBUG_PRINT(...) \
+  { DEBUG_PRINTER.print(__VA_ARGS__); }
+#define DEBUG_PRINTLN(...) \
+  { DEBUG_PRINTER.println(__VA_ARGS__); }
 #else
-  #define DEBUG_PRINT(...) {}
-  #define DEBUG_PRINTLN(...) {}
+#define DEBUG_PRINT(...) \
+  {}
+#define DEBUG_PRINTLN(...) \
+  {}
 #endif
 
 // Define types of sensors.
@@ -41,27 +45,27 @@ written by Adafruit Industries
 
 
 class DHT : public Sensor {
-  public:
-   DHT(uint8_t pin, uint8_t type, std::function<void()> onFailure, uint8_t count=6);
-   void begin(void);
-   float readTemperature(bool S=false, bool force=false);
-   float convertCtoF(float);
-   float convertFtoC(float);
-   float computeHeatIndex(float temperature, float percentHumidity, bool isFahrenheit=true);
-   float readHumidity(bool force=false);
-   boolean read(bool force=false);
+public:
+  DHT(uint8_t pin, uint8_t type, std::function<void()> onFailure, uint8_t count = 6);
+  void begin(void);
+  float readTemperature(bool S = false, bool force = false);
+  float convertCtoF(float);
+  float convertFtoC(float);
+  float computeHeatIndex(float temperature, float percentHumidity, bool isFahrenheit = true);
+  float readHumidity(bool force = false);
+  boolean read(bool force = false);
 
-   std::optional<NetSender::Pin> read(int softwarePin) override;
+  std::optional<NetSender::Pin> read(int softwarePin) override;
 
- private:
-  int failures{0};
+private:
+  int failures{ 0 };
   uint8_t data[5];
   uint8_t _pin, _type;
-  #ifdef __AVR
-    // Use direct GPIO access on an 8-bit AVR so keep track of the port and bitmask
-    // for the digital pin connected to the DHT.  Other platforms will use digitalRead.
-    uint8_t _bit, _port;
-  #endif
+#ifdef __AVR
+  // Use direct GPIO access on an 8-bit AVR so keep track of the port and bitmask
+  // for the digital pin connected to the DHT.  Other platforms will use digitalRead.
+  uint8_t _bit, _port;
+#endif
   uint32_t _lastreadtime, _maxcycles;
   bool _lastresult;
 
@@ -71,14 +75,13 @@ class DHT : public Sensor {
 };
 
 class InterruptLock {
-  public:
-   InterruptLock() {
+public:
+  InterruptLock() {
     noInterrupts();
-   }
-   ~InterruptLock() {
+  }
+  ~InterruptLock() {
     interrupts();
-   }
-
+  }
 };
 
 #endif

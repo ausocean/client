@@ -1,4 +1,4 @@
- /*
+/*
   SDLWeather.h - Library for Weather Sensor
   Designed for:  SwitchDoc Labs WeatherRack www.switchdoc.com
   Argent Data Systems
@@ -20,11 +20,10 @@
 #include "sensor.h"
 #include <optional>
 
-extern "C" void serviceInterruptAnem(void)  __attribute__ ((signal));
-extern "C" void serviceInterruptRain(void)  __attribute__ ((signal));
-class SDLWeather : public Sensor
-{
-  public:
+extern "C" void serviceInterruptAnem(void) __attribute__((signal));
+extern "C" void serviceInterruptRain(void) __attribute__((signal));
+class SDLWeather : public Sensor {
+public:
   SDLWeather(int pinAnem, int pinRain, int ADChannel);
 
   float getCurrentRainTotal();
@@ -40,7 +39,7 @@ class SDLWeather : public Sensor
   friend void serviceInterruptAnem();
   friend void serviceInterruptRain();
 
-  private:
+private:
   int _pinAnem;
   int _pinRain;
   int _ADChannel;
@@ -52,7 +51,7 @@ class SDLWeather : public Sensor
   float _currentWindSpeed;
   float _currentWindDirection;
 
-  float _rainTotal{0.0};
+  float _rainTotal{ 0.0 };
 
   void startWindSample(float sampleTime);
   float getCurrentWindSpeedWhenSampling();
