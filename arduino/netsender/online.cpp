@@ -43,20 +43,20 @@
 namespace NetSender {
 
 // Network constants.
-#define SVC_URL       "http://data.cloudblue.org" // Web service.
-#define DEFAULT_WIFI  "netreceiver,netsender"     // Default WiFi credentials.
+#define SVC_URL "http://data.cloudblue.org"   // Web service.
+#define DEFAULT_WIFI "netreceiver,netsender"  // Default WiFi credentials.
 
-#define MAX_PATH      256   // Maximum URL path size.
+#define MAX_PATH 256        // Maximum URL path size.
 #define WIFI_ATTEMPTS 100   // Number of WiFi attempts
-#define WIFI_DELAY    100   // Milliseconds between WiFi attempts.
-#define HTTP_TIMEOUT  10000 // Millisecond timeout for HTTP connection and request attempts.
+#define WIFI_DELAY 100      // Milliseconds between WiFi attempts.
+#define HTTP_TIMEOUT 10000  // Millisecond timeout for HTTP connection and request attempts.
 
 // HTTP status codes that we care about.
 enum httpStatusCode {
-  httpOK                = 200,
-  httpMovedPermanently  = 301,
-  httpMovedTemporarily  = 302,
-  httpSeeOther          = 303,
+  httpOK = 200,
+  httpMovedPermanently = 301,
+  httpMovedTemporarily = 302,
+  httpSeeOther = 303,
   httpTemporaryRedirect = 307,
   httpPermanentRedirect = 308,
 };
@@ -66,9 +66,9 @@ static IPAddress LocalAddress;
 static int NetworkFailures = 0;
 
 // fmtMacAddress formats a MAC address.
-char * fmtMacAddress(byte mac[6], char str[MAC_SIZE]) {
+char* fmtMacAddress(byte mac[6], char str[MAC_SIZE]) {
   const char* hexDigits = "0123456789ABCDEF";
-  char * strp = str;
+  char* strp = str;
   for (int ii = 0; ii < 6; ii++) {
     *strp++ = hexDigits[(mac[ii] & 0x00F0) >> 4];
     *strp++ = hexDigits[mac[ii] & 0x000F];
@@ -129,7 +129,7 @@ bool wifiControl(bool on) {
   if (on) {
     log(logDebug, "Turning WiFi on");
     if (WiFi.status() == WL_CONNECTED) {
-      return true; // Nothing to do.
+      return true;  // Nothing to do.
     }
     wifiOn();
     if (!WiFi.mode(WIFI_STA)) {
@@ -153,11 +153,11 @@ bool wifiControl(bool on) {
 
 // wifiConnect attempt to connects to the supplied WiFi network.
 // wifi is network info as CSV "ssid,key" (ssid must not contain a comma!)
-bool wifiConnect(const char * wifi) {
+bool wifiConnect(const char* wifi) {
   // NB: only works for WPA/WPA2 network
   char ssid[WIFI_SIZE], *key;
   if (wifi[0] == '\0') {
-    return false; // though not a connection failure
+    return false;  // though not a connection failure
   }
   strcpy(ssid, wifi);
   key = strchr(ssid, ',');
@@ -170,7 +170,7 @@ bool wifiConnect(const char * wifi) {
   log(logDebug, "Requesting DHCP from %s", wifi);
   WiFi.begin(ssid, key);
   delay(WIFI_DELAY);
- 
+
   // NB: connecting can take several seconds, so ensure WIFI_ATTEMPTS x WIFI_DELAY is at least 5000ms.
   for (int attempts = 0; attempts < WIFI_ATTEMPTS; attempts++) {
     if (WiFi.status() == WL_CONNECTED) {
@@ -192,7 +192,7 @@ bool wifiBegin() {
   if (ok) {
     ok = wifiConnect(Config.wifi);
     if (!ok && strcmp(Config.wifi, DEFAULT_WIFI) != 0) {
-      // The wifi cannot be reconfigured whilst it is still 
+      // The wifi cannot be reconfigured whilst it is still
       // trying to connect. So we turn it off, and back on.
       ok = wifiControl(false);
       if (!ok) {
@@ -219,24 +219,24 @@ bool httpRequest(String url, String body, String& reply) {
   log(logDebug, "%s %s", get ? "GET" : "POST", url.c_str());
   http.setTimeout(HTTP_TIMEOUT);
   http.begin(client, url);
-  const char* locationHeader[] = {"Location"};
+  const char* locationHeader[] = { "Location" };
   http.collectHeaders(locationHeader, 1);
   if (!get) {
     http.addHeader("Content-Type", "application/json");
   }
-  auto status = get ? http.GET(): http.POST(body);
+  auto status = get ? http.GET() : http.POST(body);
 
   switch (status) {
-  case httpMovedPermanently:
-  case httpMovedTemporarily:
-  case httpSeeOther:
-  case httpTemporaryRedirect:
-  case httpPermanentRedirect:
-    url = http.header("Location");
-    log(logDebug, "Redirecting to: %s", url.c_str());
-    http.end();
-    client.stop();
-    return httpRequest(url, body, reply); // Redirect to the new location.
+    case httpMovedPermanently:
+    case httpMovedTemporarily:
+    case httpSeeOther:
+    case httpTemporaryRedirect:
+    case httpPermanentRedirect:
+      url = http.header("Location");
+      log(logDebug, "Redirecting to: %s", url.c_str());
+      http.end();
+      client.stop();
+      return httpRequest(url, body, reply);  // Redirect to the new location.
   }
 
   auto ok = (status == httpOK);
@@ -255,7 +255,7 @@ bool httpRequest(String url, String body, String& reply) {
 // persistence and recording our MAC address.
 bool OnlineHandler::init() {
   log(logDebug, "Initializing online handler");
-  
+
   // Disable WiFi persistence in flash memory.
   WiFi.persistent(false);
 
@@ -274,31 +274,31 @@ bool OnlineHandler::init() {
 
 // request issue a single request, writing polled values to 'inputs' and actuated values to 'outputs'.
 // Config requests (and only config requests) communicate the device mode and error,
-// where the mode corresponds to the name of the _active_ request handler.  
+// where the mode corresponds to the name of the _active_ request handler.
 // Sets 'reconfig' true if reconfiguration is required, otherwise leaves the value as is.
-// Side effects: 
+// Side effects:
 //   Updates VarSum global when differs from the varsum ("vs") parameter.
 //   Sets Configured global to false for update and alarm requests.
 //   Updates, enters debug mode or alarm mode, or reboots according to the response code ("rc").
-bool OnlineHandler::request(RequestType req, Pin * inputs, Pin * outputs, bool * reconfig, String& reply) {
+bool OnlineHandler::request(RequestType req, Pin* inputs, Pin* outputs, bool* reconfig, String& reply) {
   char path[MAX_PATH];
   String param, body;
-  unsigned long ut = millis()/1000;
+  unsigned long ut = millis() / 1000;
 
   switch (req) {
-  case RequestConfig:
-    sprintf(path, "/config?vn=%d&ma=%s&dk=%s&la=%d.%d.%d.%d&ut=%ld&md=%s&er=%s", VERSION, MacAddress, Config.dkey,
-            LocalAddress[0], LocalAddress[1], LocalAddress[2], LocalAddress[3], ut, Handler->name(), Error.c_str());
-    break;
-  case RequestPoll:
-    sprintf(path, "/poll?vn=%d&ma=%s&dk=%s&ut=%ld", VERSION, MacAddress, Config.dkey, ut);
-    break;
-  case RequestAct:
-    sprintf(path, "/act?vn=%d&ma=%s&dk=%s&ut=%ld", VERSION, MacAddress, Config.dkey, ut);
-    break;
-  case RequestVars:
-    sprintf(path, "/vars?vn=%d&ma=%s&dk=%s&ut=%ld", VERSION, MacAddress, Config.dkey, ut);
-    break;
+    case RequestConfig:
+      sprintf(path, "/config?vn=%d&ma=%s&dk=%s&la=%d.%d.%d.%d&ut=%ld&md=%s&er=%s", VERSION, MacAddress, Config.dkey,
+              LocalAddress[0], LocalAddress[1], LocalAddress[2], LocalAddress[3], ut, Handler->name(), Error.c_str());
+      break;
+    case RequestPoll:
+      sprintf(path, "/poll?vn=%d&ma=%s&dk=%s&ut=%ld", VERSION, MacAddress, Config.dkey, ut);
+      break;
+    case RequestAct:
+      sprintf(path, "/act?vn=%d&ma=%s&dk=%s&ut=%ld", VERSION, MacAddress, Config.dkey, ut);
+      break;
+    case RequestVars:
+      sprintf(path, "/vars?vn=%d&ma=%s&dk=%s&ut=%ld", VERSION, MacAddress, Config.dkey, ut);
+      break;
   }
 
   if (inputs != NULL) {
@@ -316,7 +316,7 @@ bool OnlineHandler::request(RequestType req, Pin * inputs, Pin * outputs, bool *
     }
   }
 
-  if (connect() && httpRequest(String(SVC_URL)+String(path), body, reply)) {
+  if (connect() && httpRequest(String(SVC_URL) + String(path), body, reply)) {
     writeAlarm(false, true);
     NetworkFailures = 0;
   } else {
@@ -356,29 +356,29 @@ bool OnlineHandler::request(RequestType req, Pin * inputs, Pin * outputs, bool *
     auto rc = param.toInt();
     log(logDebug, "rc=%d", rc);
     switch (rc) {
-    case rcOK:
-      break;
-    case rcUpdate:
-      log(logDebug, "Received update request.");
-      *reconfig = true;
-      Configured = false;
-      break;
-    case rcReboot:
-      log(logDebug, "Received reboot request.");
-      if (Configured) {
-        restart(bootNormal, false);
-      } // else ignore reboot request unless configured
-      break;
-    case rcAlarm:
-      log(logDebug, "Received alarm request.");
-      if (Configured && Config.vars[pvAlarmPeriod] > 0) {
-        writeAlarm(true, false);
+      case rcOK:
+        break;
+      case rcUpdate:
+        log(logDebug, "Received update request.");
         *reconfig = true;
         Configured = false;
-      }
-      break;
-    default:
-      break;
+        break;
+      case rcReboot:
+        log(logDebug, "Received reboot request.");
+        if (Configured) {
+          restart(bootNormal, false);
+        }  // else ignore reboot request unless configured
+        break;
+      case rcAlarm:
+        log(logDebug, "Received alarm request.");
+        if (Configured && Config.vars[pvAlarmPeriod] > 0) {
+          writeAlarm(true, false);
+          *reconfig = true;
+          Configured = false;
+        }
+        break;
+      default:
+        break;
     }
   }
 
@@ -410,11 +410,11 @@ bool OnlineHandler::connect() {
 // Disconnect from WiFi, unless already disconnected.
 void OnlineHandler::disconnect() {
   if (!connected) {
-    wifiOff(); // Just to be certain!
+    wifiOff();  // Just to be certain!
     return;
   }
   wifiControl(false);
   connected = false;
 }
 
-} // end namespace
+}  // end namespace

@@ -77,4 +77,4 @@ BaseHandler* HandlerManager::get(const char* name) {
   return NULL;
 }
 
-} // end namespace
+}  // end namespace

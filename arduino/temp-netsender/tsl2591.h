@@ -27,37 +27,38 @@ LICENSE
 
 #define MAX_FAILURES 10
 
-static constexpr auto TSL_ID{70};
+static constexpr auto TSL_ID{ 70 };
 
 class TSL2951 : public Sensor {
 public:
-    TSL2951(int sdaPin, int sclPin, std::function<void()> onFailure) : tsl(TSL_ID), onFailure(onFailure) {
-      Wire.begin(sdaPin, sclPin);
-      tsl.setGain(TSL2591_GAIN_LOW);
-      tsl.setTiming(TSL2591_INTEGRATIONTIME_100MS);
+  TSL2951(int sdaPin, int sclPin, std::function<void()> onFailure)
+    : tsl(TSL_ID), onFailure(onFailure) {
+    Wire.begin(sdaPin, sclPin);
+    tsl.setGain(TSL2591_GAIN_LOW);
+    tsl.setTiming(TSL2591_INTEGRATIONTIME_100MS);
+    tsl.begin();
+  }
+
+  std::optional<NetSender::Pin> read(int softwarePin) override {
+    if (failures >= MAX_FAILURES) {
+      onFailure();
       tsl.begin();
+      failures = 0;
     }
 
-    std::optional<NetSender::Pin> read(int softwarePin) override {
-      if (failures >= MAX_FAILURES) {
-            onFailure();
-            tsl.begin();
-            failures = 0;
-        }
-
-        if (softwarePin == 60) {
-          auto lum = tsl.getLuminosity(TSL2591_FULLSPECTRUM);
-              if ((lum <= 0) || isnan(lum)) {
-                failures++;
-                return std::nullopt;
-              }
-              NetSender::Pin pin{.value = lum};
-              return pin;
-        }
+    if (softwarePin == 60) {
+      auto lum = tsl.getLuminosity(TSL2591_FULLSPECTRUM);
+      if ((lum <= 0) || isnan(lum)) {
+        failures++;
         return std::nullopt;
+      }
+      NetSender::Pin pin{ .value = lum };
+      return pin;
     }
+    return std::nullopt;
+  }
 private:
-    int failures{0};
-    Adafruit_TSL2591 tsl;
-    std::function<void()> onFailure;
+  int failures{ 0 };
+  Adafruit_TSL2591 tsl;
+  std::function<void()> onFailure;
 };

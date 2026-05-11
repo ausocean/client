@@ -31,24 +31,24 @@
 namespace NetSender {
 
 #ifdef ESP8266
-#define SD_CS_PIN     15 // SD Chip Select pin (but has boot restrictions)
-#define SPI_SCLK_PIN  14 // SPI Serial Clock pin
-#define SPI_MISO_PIN  12 // SPI Master In Slave Out pin
-#define SPI_MOSI_PIN  13 // SPI Master Out Slave In pin
+#define SD_CS_PIN 15     // SD Chip Select pin (but has boot restrictions)
+#define SPI_SCLK_PIN 14  // SPI Serial Clock pin
+#define SPI_MISO_PIN 12  // SPI Master In Slave Out pin
+#define SPI_MOSI_PIN 13  // SPI Master Out Slave In pin
 #endif
 #ifdef ESP32 || defined __linux__
-#define SD_CS_PIN      5 // SD Chip Select pin
-#define SPI_SCLK_PIN  18 // SPI Serial Clock pin
-#define SPI_MISO_PIN  19 // SPI Master In Slave Out pin
-#define SPI_MOSI_PIN  23 // SPI Master Out Slave In pin
+#define SD_CS_PIN 5      // SD Chip Select pin
+#define SPI_SCLK_PIN 18  // SPI Serial Clock pin
+#define SPI_MISO_PIN 19  // SPI Master In Slave Out pin
+#define SPI_MOSI_PIN 23  // SPI Master Out Slave In pin
 #endif
 
 // SD data file constants.
 namespace datafile {
-  constexpr char dirNSD[]          = "/NSD";     // NetSender Data.
-  const long version                = 1;
-  const unsigned long versionMarker = 0x7ffffffe;
-  const unsigned long timeMarker    = 0x7fffffff;
+constexpr char dirNSD[] = "/NSD";  // NetSender Data.
+const long version = 1;
+const unsigned long versionMarker = 0x7ffffffe;
+const unsigned long timeMarker = 0x7fffffff;
 }
 
 // Scalar type without ID.
@@ -102,8 +102,7 @@ bool writeRecord(File file, long value, unsigned long timestamp) {
 // writeHeader writes an SD card data file header comprising a version
 // record followed by the reference timestamp.
 bool writeHeader(File file) {
-  if (!(writeRecord(file, datafile::versionMarker, datafile::version) &&
-        writeRecord(file, datafile::timeMarker, RefTimestamp))) {
+  if (!(writeRecord(file, datafile::versionMarker, datafile::version) && writeRecord(file, datafile::timeMarker, RefTimestamp))) {
     log(logError, "Could not write header to SD card file %s", file.name());
     return false;
   }
@@ -118,30 +117,30 @@ bool writeHeader(File file) {
 // - Config & Vars: delegated to the online handler, which will fail unless there is network connectivity.
 // - Poll: write input data to SD card.
 // - Act: does nothing.
-bool OfflineHandler::request(RequestType req, Pin * inputs, Pin * outputs, bool * reconfig, String& reply) {
+bool OfflineHandler::request(RequestType req, Pin* inputs, Pin* outputs, bool* reconfig, String& reply) {
   switch (req) {
-  case RequestConfig:
-  case RequestVars:
-    {
-      auto h = Handlers.get(mode::Online);
-      if (h == NULL) {
-        log(logError, "Could not get online handler");
-        return false;
+    case RequestConfig:
+    case RequestVars:
+      {
+        auto h = Handlers.get(mode::Online);
+        if (h == NULL) {
+          log(logError, "Could not get online handler");
+          return false;
+        }
+        auto ok = h->request(req, NULL, NULL, reconfig, reply);
+        h->disconnect();
+        return ok;
       }
-      auto ok = h->request(req, NULL, NULL, reconfig, reply);
-      h->disconnect();
-      return ok;
-    }
-  case RequestPoll:
-    break; // Handle below.
-  case RequestAct:
-    return true;
-  default:
-    return false;
+    case RequestPoll:
+      break;  // Handle below.
+    case RequestAct:
+      return true;
+    default:
+      return false;
   }
 
   if (inputs == NULL) {
-    return true; // Nothing to do.
+    return true;  // Nothing to do.
   }
 
   if (!initialized) {
@@ -153,8 +152,8 @@ bool OfflineHandler::request(RequestType req, Pin * inputs, Pin * outputs, bool 
   }
 
   auto ok = true;
-  unsigned long t = (millis()+500)/1000; // Nearest second.
-  char filename[sizeof(datafile::dirNSD)+PIN_SIZE+1];
+  unsigned long t = (millis() + 500) / 1000;  // Nearest second.
+  char filename[sizeof(datafile::dirNSD) + PIN_SIZE + 1];
 
   for (int ii = 0; ii < MAX_PINS && inputs[ii].name[0] != '\0'; ii++) {
     if (!inputs[ii].value.has_value()) {
@@ -162,7 +161,7 @@ bool OfflineHandler::request(RequestType req, Pin * inputs, Pin * outputs, bool 
       continue;
     }
 
-    log(logDebug, "Saving %s=%d @ %lu (%lu+%lu)", inputs[ii].name, inputs[ii].value.value(), RefTimestamp+t, RefTimestamp, t);
+    log(logDebug, "Saving %s=%d @ %lu (%lu+%lu)", inputs[ii].name, inputs[ii].value.value(), RefTimestamp + t, RefTimestamp, t);
 
     // Append data to a binary file with the name of the pin.
     strcpy(filename, datafile::dirNSD);
@@ -185,7 +184,7 @@ bool OfflineHandler::request(RequestType req, Pin * inputs, Pin * outputs, bool 
       }
     }
 
-    if (!writeRecord(file, inputs[ii].value.value(), RefTimestamp+t)) {
+    if (!writeRecord(file, inputs[ii].value.value(), RefTimestamp + t)) {
       log(logError, "Could not write data to SD card file %s", filename);
       ok = false;
     }
@@ -196,4 +195,4 @@ bool OfflineHandler::request(RequestType req, Pin * inputs, Pin * outputs, bool 
   return ok;
 }
 
-} // end namespace
+}  // end namespace

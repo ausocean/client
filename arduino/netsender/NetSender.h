@@ -33,72 +33,72 @@
 namespace NetSender {
 
 #ifdef ESP8266
-#define VERSION                193
-#define MAX_PINS               10
-#define DKEY_SIZE              20
-#define RESERVED_SIZE          48
+#define VERSION 193
+#define MAX_PINS 10
+#define DKEY_SIZE 20
+#define RESERVED_SIZE 48
 #endif
 #if defined ESP32 || defined __linux__
-#define VERSION                10023
-#define MAX_PINS               20
-#define DKEY_SIZE              32
-#define RESERVED_SIZE          64
+#define VERSION 10023
+#define MAX_PINS 20
+#define DKEY_SIZE 32
+#define RESERVED_SIZE 64
 #endif
 
-#define MAC_SIZE               18
-#define WIFI_SIZE              80
-#define PIN_SIZE               4
-#define IO_SIZE                (MAX_PINS * PIN_SIZE)
-#define MAX_VARS               12
-#define MAX_HANDLERS           2
+#define MAC_SIZE 18
+#define WIFI_SIZE 80
+#define PIN_SIZE 4
+#define IO_SIZE (MAX_PINS * PIN_SIZE)
+#define MAX_VARS 12
+#define MAX_HANDLERS 2
 
 // Device modes.
 namespace mode {
-  constexpr const char* Online = "Normal";
-  constexpr const char* Offline = "Offline";
+constexpr const char* Online = "Normal";
+constexpr const char* Offline = "Offline";
 }
 
 // Device errors.
 namespace error {
-  constexpr const char* None = "";
-  constexpr const char* LowVoltage = "LowVoltage";
-  constexpr const char* SDCardFailure = "SDCardFailure";
+constexpr const char* None = "";
+constexpr const char* LowVoltage = "LowVoltage";
+constexpr const char* SDCardFailure = "SDCardFailure";
 }
 
 // Device requests.
 typedef enum {
   RequestConfig = 0,
-  RequestPoll   = 1,
-  RequestAct    = 2,
-  RequestVars   = 3,
+  RequestPoll = 1,
+  RequestAct = 2,
+  RequestVars = 3,
 } RequestType;
 
 // Service response codes.
 enum rcCode {
-  rcOK      = 0,
-  rcUpdate  = 1,
-  rcReboot  = 2,
-  rcDebug   = 3,
+  rcOK = 0,
+  rcUpdate = 1,
+  rcReboot = 2,
+  rcDebug = 3,
   rcUpgrade = 4,
-  rcAlarm   = 5,
-  rcTest    = 6
+  rcAlarm = 5,
+  rcTest = 6
 };
 
 // Boot codes.
 enum bootReason {
-  bootNormal = 0x00, // Normal reboot (operator requested).
-  bootWiFi   = 0x01, // Reboot due to error when trying to disconnect from Wifi.
-  bootAlarm  = 0x02, // Alarm auto-restart.
+  bootNormal = 0x00,  // Normal reboot (operator requested).
+  bootWiFi = 0x01,    // Reboot due to error when trying to disconnect from Wifi.
+  bootAlarm = 0x02,   // Alarm auto-restart.
 };
 
 // Log levels for use with log function.
 typedef enum logLevel {
-  logNone    = 0,
-  logError   = 1,
+  logNone = 0,
+  logError = 1,
   logWarning = 2,
-  logInfo    = 3,
-  logDebug   = 4,
-  logMax     = 5
+  logInfo = 3,
+  logDebug = 4,
+  logMax = 5
 } LogLevel;
 
 // Persistent variables (stored in EEPROM as part of configuration).
@@ -139,19 +139,19 @@ typedef struct {
   char dkey[DKEY_SIZE];
   char inputs[IO_SIZE];
   char outputs[IO_SIZE];
-  int  vars[MAX_VARS];
+  int vars[MAX_VARS];
   char reserved[RESERVED_SIZE];
 } Configuration;
 
 // Pin represents a pin name and value and optional POST data.
 typedef struct {
-  char name [PIN_SIZE];
-  std::optional<int> value; // std::nullopt indicates no invalid or no value.
-  byte * data;
+  char name[PIN_SIZE];
+  std::optional<int> value;  // std::nullopt indicates no invalid or no value.
+  byte* data;
 } Pin;
 
 // ReaderFunc represents a pin reading function.
-typedef std::optional<int> (*ReaderFunc)(Pin *);
+typedef std::optional<int> (*ReaderFunc)(Pin*);
 
 // BaseHandler defines our abstract base handler class.
 class BaseHandler {
@@ -166,7 +166,9 @@ public:
 // OnlineHandler defines our handler in normal (online) operating mode.
 class OnlineHandler : public BaseHandler {
 public:
-  const char* name() { return mode::Online; }
+  const char* name() {
+    return mode::Online;
+  }
   bool init() override;
   bool request(RequestType req, Pin* inputs, Pin* outputs, bool* reconfig, String& reply) override;
   bool connect() override;
@@ -178,11 +180,15 @@ private:
 // OfflineHandler defines our handler in offline mode.
 class OfflineHandler : public BaseHandler {
 public:
-  const char* name() override { return mode::Offline; };
+  const char* name() override {
+    return mode::Offline;
+  };
   bool init() override;
   bool request(RequestType req, Pin* inputs, Pin* outputs, bool* reconfig, String& reply) override;
-  bool connect() override { return false; };
-  void disconnect() override {};
+  bool connect() override {
+    return false;
+  };
+  void disconnect() override{};
 private:
   bool initialized;
 };
@@ -193,10 +199,10 @@ public:
   HandlerManager();
   ~HandlerManager();
 
-  bool add(BaseHandler* handler);     // Add a handler.
-  BaseHandler* set(const char* name); // Set the current/active handler and return it.
-  BaseHandler* get();                 // Get the current/active handler.
-  BaseHandler* get(const char* name); // Get a handler by name.
+  bool add(BaseHandler* handler);      // Add a handler.
+  BaseHandler* set(const char* name);  // Set the current/active handler and return it.
+  BaseHandler* get();                  // Get the current/active handler.
+  BaseHandler* get(const char* name);  // Get a handler by name.
 
 private:
   BaseHandler* handlers[MAX_HANDLERS];
@@ -213,11 +219,11 @@ extern ReaderFunc PostReader;
 extern int VarSum;
 extern HandlerManager Handlers;
 extern unsigned long RefTimestamp;
-extern BaseHandler *Handler;
+extern BaseHandler* Handler;
 extern String Error;
 
 // init should be called from setup once.
-// run should be called from loop until it returns true, e.g., 
+// run should be called from loop until it returns true, e.g.,
 //  while (!run(&vs)) {
 //    delay(RETRY_PERIOD * (long)1000);
 //  }
@@ -231,5 +237,5 @@ extern void writeAlarm(bool, bool);
 extern bool extractJson(String, const char*, String&);
 extern void restart(bootReason, bool);
 
-} // end namespace
+}  // end namespace
 #endif

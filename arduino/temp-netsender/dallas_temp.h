@@ -30,38 +30,39 @@ LICENSE
 
 #define MAX_FAILURES 10
 
-#define ZERO_CELSIUS 273.15 // In Kelvin.
+#define ZERO_CELSIUS 273.15  // In Kelvin.
 
 class DallasTemp : public Sensor {
 public:
-    DallasTemp(int hardwarePin, std::function<void()> onFailure) : ow(hardwarePin), dt(&ow), onFailure(onFailure) {
-        dt.begin();
+  DallasTemp(int hardwarePin, std::function<void()> onFailure)
+    : ow(hardwarePin), dt(&ow), onFailure(onFailure) {
+    dt.begin();
+  }
+
+  std::optional<NetSender::Pin> read(int softwarePin) override {
+    if (failures >= MAX_FAILURES) {
+      onFailure();
+      dt.begin();
+      failures = 0;
     }
 
-    std::optional<NetSender::Pin> read(int softwarePin) override {
-        if (failures >= MAX_FAILURES) {
-            onFailure();
-            dt.begin();
-            failures = 0;
-        }
-
-        if (softwarePin == 60) {
-            dt.requestTemperatures();
-            auto ff = dt.getTempCByIndex(0);
-            if (isnan(ff) || ff <= -127) {
-                failures++;
-                return std::nullopt;
-            } else {
-                return NetSender::Pin{.value = 10 * (ff + ZERO_CELSIUS)};
-            }
-        }
+    if (softwarePin == 60) {
+      dt.requestTemperatures();
+      auto ff = dt.getTempCByIndex(0);
+      if (isnan(ff) || ff <= -127) {
+        failures++;
         return std::nullopt;
+      } else {
+        return NetSender::Pin{ .value = 10 * (ff + ZERO_CELSIUS) };
+      }
     }
+    return std::nullopt;
+  }
 private:
-    int failures{0};
-    DallasTemperature dt;
-    OneWire ow;
-    std::function<void()> onFailure;
+  int failures{ 0 };
+  DallasTemperature dt;
+  OneWire ow;
+  std::function<void()> onFailure;
 };
 
-#endif // DALLAS_TEMP_H
+#endif  // DALLAS_TEMP_H

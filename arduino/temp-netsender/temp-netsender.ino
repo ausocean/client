@@ -47,55 +47,55 @@ LICENSE
 
 // If DHT enabled, define type and hardware pins depending on ESP8266 or ESP32
 #ifdef ENABLE_DHT_SENSOR
-  #include "DHT.h"
-  #define DHTTYPE DHT22 // external device #5
+#include "DHT.h"
+#define DHTTYPE DHT22  // external device #5
 
-  #ifdef ESP8266
-    #define DHTPIN       12
-  #else
-    #define DHTPIN       36
-  #endif
+#ifdef ESP8266
+#define DHTPIN 12
+#else
+#define DHTPIN 36
+#endif
 #endif
 
 // If Dallas Temperature enabled, define hardware pin depending on ESP8266 or ESP32
 #ifdef ENABLE_DALLAS_TEMP_SENSOR
-  #include "dallas_temp.h"
-  #ifdef ESP8266
-    #define DTPIN        13
-  #else
-    #define DTPIN        39
-  #endif
+#include "dallas_temp.h"
+#ifdef ESP8266
+#define DTPIN 13
+#else
+#define DTPIN 39
+#endif
 #endif
 
 // If TSL2591 Photometer enabled, define hardware pins (only for ESP32)
 #ifdef ENABLE_TSL2591_SENSOR
-  #include "tsl2591.h"
-  #ifdef ESP32
-    #define SDA          16
-    #define SCL          17
-  #endif
+#include "tsl2591.h"
+#ifdef ESP32
+#define SDA 16
+#define SCL 17
+#endif
 #endif
 
 // If GPS enabled, define hardware pins depending on ESP8266 or ESP32
 #ifdef ENABLE_GPS_SENSOR
-  #include "gps.h"
-  #ifdef ESP8266
-    #define RXPIN        3
-    #define TXPIN        -1
-  #else
-    #define RXPIN        34
-    #define TXPIN        -1
-  #endif
+#include "gps.h"
+#ifdef ESP8266
+#define RXPIN 3
+#define TXPIN -1
+#else
+#define RXPIN 34
+#define TXPIN -1
+#endif
 #endif
 
 // If SDL Weather enabled, define hardware pins and channel
 #ifdef ENABLE_SDL_WEATHER_SENSOR
-  #ifdef ESP8266
-    #include "SDLWeather.h"
-    #define SDL_PIN_ANEM  4
-    #define SDL_PIN_RAIN  5
-    #define SDL_AD_CHAN   A0
-  #endif
+#ifdef ESP8266
+#include "SDLWeather.h"
+#define SDL_PIN_ANEM 4
+#define SDL_PIN_RAIN 5
+#define SDL_AD_CHAN A0
+#endif
 #endif
 
 
@@ -111,7 +111,7 @@ std::vector<Sensor*> softwareSensors;
 std::vector<Sensor*> binarySensors;
 
 // reader is the pin reader that polls available software sensors
-std::optional<int> softwareReader(NetSender::Pin *pin) {
+std::optional<int> softwareReader(NetSender::Pin* pin) {
   pin->value = std::nullopt;
   if (pin->name[0] != 'X') {
     return std::nullopt;
@@ -119,7 +119,7 @@ std::optional<int> softwareReader(NetSender::Pin *pin) {
   auto requestedPin = atoi(pin->name + 1);
   for (Sensor* sensor : softwareSensors) {
     auto _pin = sensor->read(requestedPin);
-    if(_pin.has_value()) {
+    if (_pin.has_value()) {
       pin->value = _pin.value().value;
       pin->data = _pin.value().data;
       break;
@@ -129,12 +129,12 @@ std::optional<int> softwareReader(NetSender::Pin *pin) {
   return pin->value;
 }
 
-std::optional<int> binaryReader(NetSender::Pin *pin) {
+std::optional<int> binaryReader(NetSender::Pin* pin) {
   pin->value = std::nullopt;
   if (pin->name[0] != 'T') {
     return std::nullopt;
   }
-  auto requestedPin = atoi(pin->name +1);
+  auto requestedPin = atoi(pin->name + 1);
   for (Sensor* sensor : binarySensors) {
     auto _pin = sensor->read(requestedPin);
     if (_pin.has_value()) {
@@ -150,25 +150,31 @@ std::optional<int> binaryReader(NetSender::Pin *pin) {
 // required Arduino routines
 // NB: setup runs everytime ESP comes out of a deep sleep
 void setup() {
-  #ifdef ENABLE_DHT_SENSOR
-    softwareSensors.push_back(new DHT(DHTPIN, DHTTYPE, []() { Serial.println("DHT exceeded failures, restarting!");}));
-  #endif
+#ifdef ENABLE_DHT_SENSOR
+  softwareSensors.push_back(new DHT(DHTPIN, DHTTYPE, []() {
+    Serial.println("DHT exceeded failures, restarting!");
+  }));
+#endif
 
-  #ifdef ENABLE_DALLAS_TEMP_SENSOR
-    softwareSensors.push_back(new DallasTemp(DTPIN, []() { Serial.println("Dallas temp exceeded failures, restarting!");}));
-  #endif
+#ifdef ENABLE_DALLAS_TEMP_SENSOR
+  softwareSensors.push_back(new DallasTemp(DTPIN, []() {
+    Serial.println("Dallas temp exceeded failures, restarting!");
+  }));
+#endif
 
-  #ifdef ENABLE_TSL2591_SENSOR
-    softwareSensors.push_back(new TSL2951(SDA, SCL, []() { Serial.println("TSL2951 Photometer exceeded failures, restarting!");}));
-  #endif
+#ifdef ENABLE_TSL2591_SENSOR
+  softwareSensors.push_back(new TSL2951(SDA, SCL, []() {
+    Serial.println("TSL2951 Photometer exceeded failures, restarting!");
+  }));
+#endif
 
-  #ifdef ENABLE_SDL_WEATHER_SENSOR
-    softwareSensors.push_back(new SDLWeather(SDL_PIN_ANEM, SDL_PIN_RAIN, SDL_AD_CHAN));
-  #endif
+#ifdef ENABLE_SDL_WEATHER_SENSOR
+  softwareSensors.push_back(new SDLWeather(SDL_PIN_ANEM, SDL_PIN_RAIN, SDL_AD_CHAN));
+#endif
 
-  #ifdef ENABLE_GPS_SENSOR
-    binarySensors.push_back(new GPS(RX, TX, []() { /* GPS Doesn't currently Count failures. */ }));
-  #endif
+#ifdef ENABLE_GPS_SENSOR
+  binarySensors.push_back(new GPS(RX, TX, []() { /* GPS Doesn't currently Count failures. */ }));
+#endif
 
   NetSender::ExternalReader = &softwareReader;
   NetSender::PostReader = &binaryReader;
@@ -177,7 +183,7 @@ void setup() {
 }
 
 void loop() {
-  auto varsum{0};
+  auto varsum{ 0 };
   while (!NetSender::run(&varsum)) {
     ;
   }
