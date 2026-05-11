@@ -1,3 +1,5 @@
+#include "esp32-hal-gpio.h"
+#include "esp_err.h"
 /*
 LICENSE
   Copyright (C) 2026 the Australian Ocean Lab (AusOcean).
@@ -31,7 +33,7 @@ volatile unsigned long Calibrator::StateMachine::holdStartTime = 0;
 volatile Calibrator::Action Calibrator::StateMachine::lastAction = Calibrator::Action::NONE;
 
 Calibrator::StateMachine::StateMachine(int batteryPin)
-  : batteryPin(batteryPin) {
+  : batteryPin(batteryPin), state(READY) {
 }
 
 void Calibrator::StateMachine::enterReady() {
@@ -48,10 +50,17 @@ void Calibrator::StateMachine::init() {
     .callback = &onTimer,
     .arg = this,
   };
-  esp_timer_handle_t timer;
-  esp_timer_create(&args, &timer);
+  auto err = esp_timer_create(&args, &this->timer);
+  if (err != ESP_OK) {
+    Serial.printf("Failed to create calibration timer: %s\n", esp_err_to_name(err));
+    return;
+  }
   constexpr auto timerPeriod = 1000000;  // 1 Second (in us).
-  esp_timer_start_periodic(timer, timerPeriod);
+  err = esp_timer_start_periodic(this->timer, timerPeriod);
+  if (err != ESP_OK) {
+    Serial.println("Failed to start Calibration Timer");
+    esp_timer_delete(this->timer);
+  }
 }
 
 void Calibrator::StateMachine::enterFirstRead() {
@@ -66,14 +75,20 @@ void Calibrator::StateMachine::enterSecondRead() {
 
   this->raw24v = analogRead(this->batteryPin);
 
+  if (raw24v >= raw28v) {
+    Serial.println("unable to complete calibration as 24V reading was greater than 28V reading");
+    this->state = READY;
+    return;
+  }
+
   // 4V between calibration points (24 and 28V).
-  constexpr auto Vx = 4;
+  constexpr auto Vx = 4.0f;
 
   // Calculate offset and slope.
   auto slope = Vx / float(raw28v - raw24v);
   auto intercept = 28.0f - slope * raw28v;
 
-  Serial.printf("eq = %.2fx + %.2f", slope, intercept);
+  Serial.printf("eq = %.2fx + %.2f\n", slope, intercept);
 
   // Transition back to ready state.
   this->state = READY;
@@ -147,4 +162,11 @@ void Calibrator::StateMachine::onTimer(void *arg) {
   static_cast<Calibrator::StateMachine *>(arg)->run();
 }
 
-Calibrator::StateMachine::~StateMachine() {}
+Calibrator::StateMachine::~StateMachine() {
+  if (this->timer != nullptr) {
+    esp_timer_stop(this->timer);
+    esp_timer_delete(this->timer);
+  }
+
+  detachInterrupt(digitalPinToInterrupt(BOOT_PIN));
+}

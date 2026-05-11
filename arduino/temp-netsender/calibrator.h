@@ -72,6 +72,9 @@ private:
   // Poll task to call run periodically on timer fire.
   static void onTimer(void *arg);
 
+  // Periodic Timer.
+  esp_timer_handle_t timer;
+
 public:
   // Construct with the battery pin to read.
   StateMachine(int batteryPin);
