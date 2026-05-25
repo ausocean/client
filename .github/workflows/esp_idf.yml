@@ -23,10 +23,14 @@ jobs:
           apt-get update && apt-get install -y clang lld llvm
           cat .github/workflows/toolchain-clang-linux.cmake > $IDF_PATH/tools/cmake/toolchain-clang-linux.cmake
 
+      - name: Fix Git Directory Permissions
+        run: git config --global --add safe.directory '*'
+
       - name: Build and Run Host Tests
         shell: bash
         env:
-          IDF_TOOLCHAIN: clang
+          CC: clang
+          CXX: clang++
         run: |
           . $IDF_PATH/export.sh
           cd esp/speaker-netsender/components/pipi/host_tests/test_pipi
