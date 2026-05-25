@@ -5,6 +5,10 @@ list(APPEND EXTRA_COMPONENT_DIRS
     "../../../"         # Project component directory.
 )
 
+if(ENABLE_TESTS)
+    add_compile_definitions(RUNNING_UNIT_TESTS)
+endif()
+
 # Explicitly list the components to be included in the build.
 # Note: 'main' is the folder inside host_test/test_pipi/
 set(COMPONENTS main pipi)
@@ -12,14 +16,5 @@ set(COMPONENTS main pipi)
 # Standard ESP-IDF project configuration.
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(test_pipi)
-
-if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-    target_compile_options(gtest PRIVATE
-        "-Wno-unknown-warning-option"
-        "-Wno-character-conversion"
-    )
-elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    target_compile_options(gtest PRIVATE -Wno-character-conversion)
-endif()
 
 set(CMAKE_CXX_STANDARD 23)
