@@ -30,6 +30,16 @@ jobs:
         id: get_version
         run: echo "VERSION=${GITHUB_REF#refs/tags/speaker-netsender/}" >> $GITHUB_ENV
 
+      - name: Debug Environment Versions
+        run: |
+          $IDF_PATH/tools/idf_tools.py install esp-clang
+          . $IDF_PATH/export.sh
+          export IDF_TOOLCHAIN=clang
+          echo "=== ESP-IDF VERSION ==="
+          idf.py --version
+          echo "=== CLANG VERSION ==="
+          clang --version
+
       - name: Build project with Clang
         run: |
           $IDF_PATH/tools/idf_tools.py install esp-clang
