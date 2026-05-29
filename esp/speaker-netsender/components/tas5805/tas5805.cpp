@@ -243,9 +243,7 @@ esp_err_t TAS5805::set_volume(uint8_t vol)
     write_reg(TAS5805_CHANGE_BOOK_REG, BOOK::ZERO); // Go to book 0.
 
     // Bound volume.
-    if (vol < 0) {
-        vol = 0;
-    } else if (vol > 100) {
+    if (vol > 100) {
         vol = 100;
     }
 
