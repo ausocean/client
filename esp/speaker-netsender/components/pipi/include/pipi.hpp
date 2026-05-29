@@ -26,7 +26,9 @@
 
 #include <cstdarg>
 #include <fstream>
+#ifdef RUNNING_UNIT_TESTS
 #include <gtest/gtest_prod.h>
+#endif
 #include <ostream>
 
 #include "esp_err.h"
@@ -76,6 +78,7 @@ class Entry {
     esp_err_t write(std::ostream &stream);
 
   private:
+#ifdef RUNNING_UNIT_TESTS
     /**
      * Used for testing the Entry class.
      */
@@ -86,6 +89,7 @@ class Entry {
      */
     FRIEND_TEST(TestEntry, Create);
     FRIEND_TEST(TestEntry, Write);
+#endif
 
     /**
      * @brief maximum length for a log.
@@ -163,6 +167,7 @@ class FileLogger {
     static constexpr auto MAX_PATH_LENGTH = 256;
 
   private:
+#ifdef RUNNING_UNIT_TESTS
     friend class TestFileLogger;
 
     FRIEND_TEST(TestFileLogger, Create_Good_Path);
@@ -170,6 +175,7 @@ class FileLogger {
     FRIEND_TEST(TestFileLogger, Create_Empty_Path);
     FRIEND_TEST(TestFileLogger, Make_Path);
     FRIEND_TEST(TestFileLogger, Write_Logs_Direct);
+#endif
 
     /**
      * @brief Log a formatted message for a given log level.
