@@ -1,0 +1,65 @@
+name: Build speaker-netsender Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "speaker-netsender/v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Firmware with Clang
+    runs-on: ubuntu-latest
+    container: espressif/idf:latest
+
+    defaults:
+      run:
+        working-directory: esp/speaker-netsender
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+
+      - name: Extract Version from Tag
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/speaker-netsender/}" >> $GITHUB_ENV
+
+      - name: Debug Environment Versions
+        run: |
+          $IDF_PATH/tools/idf_tools.py install esp-clang
+          . $IDF_PATH/export.sh
+          export IDF_TOOLCHAIN=clang
+          echo "=== ESP-IDF VERSION ==="
+          idf.py --version
+          echo "=== CLANG VERSION ==="
+          clang --version
+
+      - name: Build project with Clang
+        run: |
+          $IDF_PATH/tools/idf_tools.py install esp-clang
+          . $IDF_PATH/export.sh
+          export IDF_TOOLCHAIN=clang
+          idf.py fullclean
+          idf.py build
+
+      - name: Rename binaries for release
+        run: |
+          mv build/speaker-netsender.elf build/speaker-netsender-${{ env.VERSION }}.elf
+          mv build/speaker-netsender.bin build/speaker-netsender-${{ env.VERSION }}.bin
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Speaker Netsender ${{ env.VERSION }}
+          draft: false
+          prerelease: false
+          files: |
+            esp/speaker-netsender/build/*${{ env.VERSION }}.elf
+            esp/speaker-netsender/build/*${{ env.VERSION }}.bin
