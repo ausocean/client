@@ -40,10 +40,10 @@
 #include "include/audio.hpp"
 #include "include/ethernet.hpp"
 #include "include/globals.h"
-#include "include/log.hpp"
 #include "include/netsender_vars.hpp"
 #include "include/sd.hpp"
 #include "include/self_check.hpp"
+#include "include/time.hpp"
 #include "netsender.hpp"
 #include "ota_tcp.hpp"
 #include "tas5805.hpp"
@@ -126,10 +126,6 @@ void app_main(void)
     init_ethernet();
     ESP_LOGI(TAG, "Ethernet initialised");
 
-    ESP_LOGI(TAG, "Initialising UDP Logging");
-    init_udp_logging();
-    ESP_LOGI(TAG, "Logging Initialised");
-
     ESP_LOGI(TAG, "Initialising SD card");
     init_sd();
     ESP_LOGI(TAG, "SD initialised");
@@ -141,6 +137,10 @@ void app_main(void)
     // Perform partition self-check.
     const auto valid_partition = self_check_ok(&amp);
     ota_tcp_validate_partition(valid_partition);
+
+    ESP_LOGI(TAG, "Initialising SNTP");
+    initialise_sntp();
+    ESP_LOGI(TAG, "SNTP Initialised");
 
     ESP_LOGI(TAG, "Initialising OTA listener");
     init_ota_tcp();
