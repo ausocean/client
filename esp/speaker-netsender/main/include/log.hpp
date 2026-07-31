@@ -25,3 +25,17 @@
 */
 
 #pragma once
+
+#include <cstdint>
+#include <functional>
+#include <optional>
+
+/**
+ * @brief initialise logging.
+ *
+ * @returns a read function which returns the number of bytes read or NULL on
+ * error.
+ * Initialises multi-output logging. This setup logs to file and via UDP.
+ *
+ */
+std::function<std::optional<std::vector<uint8_t>>()> init_logging();
