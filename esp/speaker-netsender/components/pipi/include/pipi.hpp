@@ -130,36 +130,12 @@ class FileLogger {
     FileLogger();
 
     /**
-     * @brief Log an info level log.
+     * @brief Writes an ESP pre-formatted log.
      *
-     * @param[in] msg format string for log message.
-     * @param[in] args arguments for format string.
+     * This handles cutting the formatted log to get the correct
+     * logging level and removing the timestamp.
      */
-    esp_err_t info(const char *msg, ...);
-
-    /**
-     * @brief Log a warn level log.
-     *
-     * @param[in] msg format string for log message.
-     * @param[in] args arguments for format string.
-     */
-    esp_err_t warn(const char *msg, ...);
-
-    /**
-     * @brief Log an error level log.
-     *
-     * @param[in] msg format string for log message.
-     * @param[in] args arguments for format string.
-     */
-    esp_err_t error(const char *msg, ...);
-
-    /**
-     * @brief Log a fatal level log.
-     *
-     * @param[in] msg format string for log message.
-     * @param[in] args arguments for format string.
-     */
-    esp_err_t fatal(const char *msg, ...);
+    esp_err_t log(char *msg);
 
     /**
      * @brief maximum path length.
@@ -176,15 +152,6 @@ class FileLogger {
     FRIEND_TEST(TestFileLogger, Make_Path);
     FRIEND_TEST(TestFileLogger, Write_Logs_Direct);
 #endif
-
-    /**
-     * @brief Log a formatted message for a given log level.
-     *
-     * @param[in] level enum log level.
-     * @param[in] msg format string for log message.
-     * @param[in] args arguments for format string.
-     */
-    esp_err_t log(const Level level, const char *msg, ...);
 
     /**
      * @brief Create a new log file with a timestamped name.

@@ -163,50 +163,38 @@ esp_err_t Pipi::FileLogger::new_file()
     return ESP_OK;
 }
 
-esp_err_t Pipi::FileLogger::info(const char *fmt, ...)
+esp_err_t Pipi::FileLogger::log(char *msg)
 {
-    va_list args;
-    va_start(args, fmt);
-    return this->log(Level::INFO, fmt, args);
-}
-esp_err_t Pipi::FileLogger::warn(const char *fmt, ...)
-{
-    va_list args;
-    va_start(args, fmt);
-    return this->log(Level::WARN, fmt, args);
-}
-esp_err_t Pipi::FileLogger::error(const char *fmt, ...)
-{
-    va_list args;
-    va_start(args, fmt);
-    return this->log(Level::ERROR, fmt, args);
-}
-esp_err_t Pipi::FileLogger::fatal(const char *fmt, ...)
-{
-    va_list args;
-    va_start(args, fmt);
-    return this->log(Level::FATAL, fmt, args);
-}
+    // Example log:
+    // I (01:02:03.040) <tag>: <log message>
+    //                  ^
+    //                  |
+    //            17th character
+    constexpr auto msg_start = 17;
 
-esp_err_t Pipi::FileLogger::log(const Pipi::Level level, const char *fmt, ...)
-{
-    va_list args;
-    va_start(args, fmt);
-    if (!this->ready) {
-        va_end(args);
-        return ESP_FAIL;
+    // Determine log level based on first character.
+    auto level = INFO;
+    switch (msg[0]) {
+    case 'I':
+        level = INFO;
+        break;
+    case 'W':
+        level = WARN;
+        break;
+    case 'E':
+        level = ERROR;
+        break;
+    case 'F':
+        level = FATAL;
+        break;
     }
 
-    char msg[Entry::MAX_LOG_LENGTH];
-    auto written = vsnprintf(msg, Entry::MAX_LOG_LENGTH, fmt, args);
-    va_end(args);
-    if (written < 0) {
-        ESP_LOGE(TAG, "unable to format log message");
-        return ESP_FAIL;
-    }
+    // Cut the level and time from the passed message.
+    auto cut_log = &msg[msg_start];
+    cut_log[strlen(cut_log) - 1] = '\0';
 
     std::chrono::system_clock::now();
-    auto e = Entry(time(nullptr), level, msg);
+    auto e = Entry(time(nullptr), level, cut_log);
 
     return e.write(curr_file);
 }

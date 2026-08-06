@@ -39,6 +39,8 @@
 #include "freertos/projdefs.h"
 
 #include "include/log_udp.hpp"
+#include "netsender.hpp"
+#include "pipi.hpp"
 
 // Logging Tag.
 static constexpr auto TAG = "log";
@@ -50,6 +52,8 @@ static constexpr auto QUEUE_ITEM_SIZE = CONFIG_LOG_LEN * sizeof(char);
 static uint8_t queue_storage[CONFIG_LOG_QUEUE_LEN * (QUEUE_ITEM_SIZE)];
 static StaticQueue_t queue_buf;
 QueueHandle_t log_queue = NULL;
+
+std::unique_ptr<Pipi::FileLogger> p;
 
 // Original vprintf handler so we can still print directly to stdout/serial
 static vprintf_like_t default_vprintf = nullptr;
@@ -86,7 +90,7 @@ static void log_processor_task(void *pvParameters)
         // Block until a new log message arrives in the queue.
         if (xQueueReceive(log_queue, msg, portMAX_DELAY) == pdTRUE) {
             udp_log_send(msg);
-            // TODO: Log to file.
+            p->log(msg);
         }
     }
 }
@@ -117,8 +121,6 @@ std::function<std::optional<std::vector<uint8_t>>()> init_logging()
 
     // Initialise UDP logging.
     init_udp_logging();
-
-    // TODO: Initialise file logging.
 
     // Start logging task.
     if (xTaskCreatePinnedToCore(log_processor_task, "logging_task", 4096, NULL, 5, NULL, 1) != pdPASS) {
