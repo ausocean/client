@@ -54,14 +54,19 @@ esp_err_t Pipi::Entry::write(std::ostream &stream)
     } else if (len < 0) {
         return ESP_FAIL;
     }
+
+    // Keep in sync with level enums.
+    auto LevelStrings = {"info", "warn", "error", "fatal"};
+
     char marshalled[Pipi::Entry::MAX_LOG_LENGTH + 100];
     auto written = snprintf(marshalled, Pipi::Entry::MAX_LOG_LENGTH + 100,
                             "{"
+                            "\"caller\":\"speaker-netsender\","
                             "\"timestamp\":%" PRId64 ","
-                            "\"level\":%d,"
+                            "\"level\":\"%s\","
                             "\"message\":\"%s\""
-                            "}",
-                            this->timestamp, this->level, this->data);
+                            "}\n",
+                            this->timestamp, LevelStrings.begin()[this->level], this->data);
     if (written < 0 || written >= sizeof(marshalled)) {
         return ESP_FAIL;
     }
@@ -197,6 +202,12 @@ esp_err_t Pipi::FileLogger::log(char *msg)
     auto e = Entry(time(nullptr), level, cut_log);
 
     return e.write(curr_file);
+}
+
+std::ifstream &Pipi::FileLogger::get_logs()
+{
+    this->new_file();
+    return this->prev_file;
 }
 
 void Pipi::FileLogger::close()

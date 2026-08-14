@@ -23,6 +23,7 @@
     along with NetSender in gpl.txt.  If not, see
     <http://www.gnu.org/licenses/>.
 */
+#pragma once
 
 #include <cstdarg>
 #include <fstream>
@@ -141,6 +142,13 @@ class FileLogger {
      * @brief maximum path length.
      */
     static constexpr auto MAX_PATH_LENGTH = 256;
+
+    /**
+     * @brief returns a pointer to the last unread log file
+     *
+     * NOTE: The caller should not close this file.
+     */
+    std::ifstream &get_logs();
 
   private:
 #ifdef RUNNING_UNIT_TESTS
