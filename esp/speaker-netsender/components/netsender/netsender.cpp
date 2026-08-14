@@ -29,12 +29,14 @@
 
 #include "freertos/FreeRTOS.h" // IWYU pragma: keep
 
+#include <cstdio>
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <string>
 #include <sys/param.h>
+#include <vector>
 
 #include "esp_err.h"
 #include "esp_http_client.h"
@@ -195,6 +197,26 @@ esp_err_t Netsender::register_input(char pin_name[NETSENDER_PIN_SIZE],
     auto pin = netsender_pin_t{};
     memcpy(pin.name, pin_name, NETSENDER_PIN_SIZE);
     pin.read = read_func;
+
+    inputs[input_cnt] = pin;
+    input_cnt++;
+
+    return ESP_OK;
+}
+
+esp_err_t Netsender::register_binary_input(char pin_name[NETSENDER_PIN_SIZE],
+                                           std::function<std::optional<std::vector<uint8_t>>()> read_binary_func)
+{
+    if (input_cnt >= CONFIG_NETSENDER_MAX_PINS) {
+        ESP_LOGE(TAG, "cannot register more than %d inputs", CONFIG_NETSENDER_MAX_PINS);
+        return ESP_FAIL;
+    }
+
+    ESP_LOGI(TAG, "registering new input: %s", pin_name);
+
+    auto pin = netsender_pin_t{};
+    memcpy(pin.name, pin_name, NETSENDER_PIN_SIZE);
+    pin.read_binary = read_binary_func;
 
     inputs[input_cnt] = pin;
     input_cnt++;
@@ -461,13 +483,30 @@ esp_err_t Netsender::req_poll()
 
     for (auto i = 0; i < input_cnt; i++) {
         auto &pin = inputs[i];
-        pin.value = pin.read();
-        if (pin.value.has_value()) {
-            ESP_LOGI(TAG, "read pin %s: %d", pin.name, pin.value.value());
-            append_pin_to_url(url, pin);
-        } else {
-            ESP_LOGE(TAG, "failed to read pin %s", pin.name);
+        if (pin.read != NULL) {
+            // Read non-binary pins.
+            pin.value = pin.read();
+            pin.value = pin.read();
+            if (!pin.value.has_value()) {
+                ESP_LOGE(TAG, "failed to read pin %s", pin.name);
+                continue;
+            }
+            ESP_LOGI(TAG, "read non-binary pin %s: %d", pin.name, pin.value.value());
+            pin.data = NULL;
+        } else if (pin.read_binary != NULL) {
+            // Read binary pins.
+            auto out = pin.read_binary();
+            if (!out.has_value()) {
+                ESP_LOGE(TAG, "failed to read pin %s", pin.name);
+                continue;
+            }
+            pin.data_storage = std::move(out.value());
+            pin.data = pin.data_storage.data();
+            pin.value = pin.data_storage.size();
+            ESP_LOGI(TAG, "read binary pin %s: %d", pin.name, pin.value.value());
         }
+
+        append_pin_to_url(url, pin);
     }
 
     // Initialise the request.
@@ -478,7 +517,50 @@ esp_err_t Netsender::req_poll()
         .event_handler = http_event_handler,
         .user_data = this->resp_buf,
     };
+
+    // Create body data to append to request.
+    static constexpr auto MAX_BODY_LEN = 1024 * 4;
+    static char body[1024 * 4];
+    auto pos = 0;
+    for (auto i = 0; i < input_cnt; i++) {
+        auto &pin = inputs[i];
+        if (pin.data == NULL) {
+            continue;
+        }
+
+        if (pos + pin.value.value() >= MAX_BODY_LEN) {
+            ESP_LOGI(TAG, "binary data would exceed max body length: %d bytes over",
+                     pos + pin.value.value() - MAX_BODY_LEN);
+            continue;
+        }
+        memcpy(body + pos, pin.data, pin.value.value());
+        pos += pin.value.value();
+    }
+
+    // Init http client.
     auto http_handle = esp_http_client_init(&http_config);
+
+    // Append body if any.
+    if (pos != 0) {
+        auto err = esp_http_client_set_method(http_handle, HTTP_METHOD_POST);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "unable to set client method: %s", esp_err_to_name(err));
+            return err;
+        }
+
+        err = esp_http_client_set_header(http_handle, "Content-Type", "application/json");
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "unable to set content-type: %s", esp_err_to_name(err));
+            return err;
+        }
+
+        err = esp_http_client_set_post_field(http_handle, (const char *)body, pos);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "unable to set post field: %s", esp_err_to_name(err));
+            esp_http_client_cleanup(http_handle);
+            return err;
+        }
+    }
 
     // Send the request.
     auto err = esp_http_client_perform(http_handle);
