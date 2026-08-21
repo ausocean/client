@@ -31,6 +31,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <mutex>
 #include <optional>
 #include <stddef.h>
 #include <stdint.h>
@@ -38,6 +39,7 @@
 #include <vector>
 
 #include "esp_err.h"
+#include "esp_http_client.h"
 
 #include "sdkconfig.h"
 
@@ -185,6 +187,21 @@ class Netsender {
      * Netsender has been configured.
      */
     bool configured;
+
+    /**
+     * Persistent handle for http requests.
+     */
+    esp_http_client_handle_t http_handle;
+
+    /**
+     * Mutex for persistent http_handle.
+     */
+    std::timed_mutex http_handle_mu;
+
+    /**
+     * @brief init function for http_handle.
+     */
+    esp_err_t init_http_handle();
 
     /**
      * Latest varsum value.

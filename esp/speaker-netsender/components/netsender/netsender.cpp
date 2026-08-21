@@ -29,8 +29,12 @@
 
 #include "freertos/FreeRTOS.h" // IWYU pragma: keep
 
+#include <chrono>
+#include <cstddef>
 #include <cstdio>
 #include <ctype.h>
+#include <mutex>
+#include <ratio>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -108,6 +112,9 @@ Netsender::Netsender()
     } else {
         this->configured = true;
     }
+
+    // Initialise HTTP handler.
+    ESP_ERROR_CHECK(init_http_handle());
 }
 
 esp_err_t Netsender::read_nvs_config()
@@ -374,25 +381,38 @@ esp_err_t Netsender::req_config()
              CONFIG_NETSENDER_REMOTE_HOST, netsender_endpoint::CONFIG, NETSENDER_VERSION, this->mac, uptime(),
              netsender_mode::ONLINE);
 
-    // Initialise the request.
-    esp_http_client_config_t http_config = {
-        .url = url,
-        .method = HTTP_METHOD_GET,
-        .disable_auto_redirect = true,
-        .event_handler = http_event_handler,
-        .user_data = this->resp_buf,
-    };
-    auto http_handle = esp_http_client_init(&http_config);
+    // Get lock for http_client.
+    using namespace std::chrono_literals;
+    std::unique_lock<std::timed_mutex> lock(this->http_handle_mu, 500ms);
+
+    if (!lock.owns_lock()) {
+        // The http handle is busy.
+        ESP_LOGE(TAG, "Unable to acquire lock for config request");
+        return ESP_FAIL;
+    }
+
+    auto err = esp_http_client_set_url(this->http_handle, url);
+    if (err != ESP_OK) {
+        lock.unlock();
+        return err;
+    }
+    err = esp_http_client_set_method(this->http_handle, HTTP_METHOD_GET);
+    if (err != ESP_OK) {
+        lock.unlock();
+        return err;
+    }
 
     // Send the request.
-    auto err = esp_http_client_perform(http_handle);
+    err = esp_http_client_perform(this->http_handle);
     if (err != ESP_OK) {
+        lock.unlock();
         return err;
     }
 
     // Check the status code.
     // TODO: Handle other status codes.
-    if (auto status_code = esp_http_client_get_status_code(http_handle) != 200) {
+    if (auto status_code = esp_http_client_get_status_code(this->http_handle) != 200) {
+        lock.unlock();
         ESP_LOGE(TAG, "got non 200 status code: %d", status_code);
         return ESP_FAIL;
     }
@@ -402,6 +422,7 @@ esp_err_t Netsender::req_config()
     // Parse the incoming config.
     std::string param;
     std::string json_resp(resp_buf);
+    lock.unlock();
     if (netsender_extract_json(json_resp, "mp", param) && std::stoi(param) != this->config.monPeriod) {
         this->config.monPeriod = std::stoi(param);
         ESP_LOGI(TAG, "monPeriod changed: %d", this->config.monPeriod);
@@ -447,8 +468,6 @@ esp_err_t Netsender::req_config()
         print_config();
     }
 
-    ESP_ERROR_CHECK(esp_http_client_cleanup(http_handle));
-
     return ESP_OK;
 }
 
@@ -486,7 +505,6 @@ esp_err_t Netsender::req_poll()
         if (pin.read != NULL) {
             // Read non-binary pins.
             pin.value = pin.read();
-            pin.value = pin.read();
             if (!pin.value.has_value()) {
                 ESP_LOGE(TAG, "failed to read pin %s", pin.name);
                 continue;
@@ -509,14 +527,26 @@ esp_err_t Netsender::req_poll()
         append_pin_to_url(url, pin);
     }
 
-    // Initialise the request.
-    esp_http_client_config_t http_config = {
-        .url = url,
-        .method = HTTP_METHOD_GET,
-        .disable_auto_redirect = true,
-        .event_handler = http_event_handler,
-        .user_data = this->resp_buf,
-    };
+    // Get lock for http_client.
+    using namespace std::chrono_literals;
+    std::unique_lock<std::timed_mutex> lock(this->http_handle_mu, 500ms);
+
+    if (!lock.owns_lock()) {
+        // The http handle is busy.
+        ESP_LOGE(TAG, "Unable to acquire lock for config request");
+        return ESP_FAIL;
+    }
+
+    auto err = esp_http_client_set_url(this->http_handle, url);
+    if (err != ESP_OK) {
+        lock.unlock();
+        return err;
+    }
+    err = esp_http_client_set_method(this->http_handle, HTTP_METHOD_GET);
+    if (err != ESP_OK) {
+        lock.unlock();
+        return err;
+    }
 
     // Create body data to append to request.
     static constexpr auto MAX_BODY_LEN = 1024 * 4;
@@ -537,40 +567,50 @@ esp_err_t Netsender::req_poll()
         pos += pin.value.value();
     }
 
-    // Init http client.
-    auto http_handle = esp_http_client_init(&http_config);
-
     // Append body if any.
     if (pos != 0) {
-        auto err = esp_http_client_set_method(http_handle, HTTP_METHOD_POST);
+        auto err = esp_http_client_set_method(this->http_handle, HTTP_METHOD_POST);
         if (err != ESP_OK) {
+            lock.unlock();
             ESP_LOGE(TAG, "unable to set client method: %s", esp_err_to_name(err));
             return err;
         }
 
-        err = esp_http_client_set_header(http_handle, "Content-Type", "application/json");
+        err = esp_http_client_set_header(this->http_handle, "Content-Type", "application/json");
         if (err != ESP_OK) {
+            lock.unlock();
             ESP_LOGE(TAG, "unable to set content-type: %s", esp_err_to_name(err));
             return err;
         }
 
-        err = esp_http_client_set_post_field(http_handle, (const char *)body, pos);
+        err = esp_http_client_set_post_field(this->http_handle, (const char *)body, pos);
         if (err != ESP_OK) {
+            lock.unlock();
             ESP_LOGE(TAG, "unable to set post field: %s", esp_err_to_name(err));
-            esp_http_client_cleanup(http_handle);
+            return err;
+        }
+    } else {
+        err = esp_http_client_set_method(this->http_handle, HTTP_METHOD_GET);
+        if (err != ESP_OK) {
+            lock.unlock();
             return err;
         }
     }
 
     // Send the request.
-    auto err = esp_http_client_perform(http_handle);
+    err = esp_http_client_perform(this->http_handle);
     if (err != ESP_OK) {
+        lock.unlock();
         return err;
     }
+
+    // Clear post data.
+    err = esp_http_client_set_post_field(this->http_handle, NULL, 0);
 
     // Check the status code.
     // TODO: Handle other status codes.
     if (auto status_code = esp_http_client_get_status_code(http_handle) != 200) {
+        lock.unlock();
         ESP_LOGE(TAG, "got non 200 status code: %d", status_code);
         return ESP_FAIL;
     }
@@ -579,6 +619,7 @@ esp_err_t Netsender::req_poll()
     ESP_LOGI(TAG, "poll response: %s", this->resp_buf);
     std::string rc;
     const auto resp = std::string(resp_buf);
+    lock.unlock();
     const auto has_rc = netsender_extract_json(resp, "rc", rc);
     if (has_rc) {
         ESP_LOGD(TAG, "got response code: %s", rc.c_str());
@@ -597,9 +638,24 @@ esp_err_t Netsender::req_poll()
         }
     }
 
-    // Cleanup http_handle.
-    ESP_ERROR_CHECK(esp_http_client_cleanup(http_handle));
+    return ESP_OK;
+}
 
+esp_err_t Netsender::init_http_handle()
+{
+    // Configure client.
+    esp_http_client_config_t config = {};
+    config.url = CONFIG_NETSENDER_REMOTE_HOST;
+    config.disable_auto_redirect = true;
+    config.event_handler = http_event_handler;
+    config.user_data = this->resp_buf;
+
+    // Init http client.
+    this->http_handle = esp_http_client_init(&config);
+
+    if (this->http_handle == NULL) {
+        return ESP_FAIL;
+    }
     return ESP_OK;
 }
 
@@ -616,25 +672,38 @@ esp_err_t Netsender::req_vars()
              "&dk=%s", // Device Key.
              CONFIG_NETSENDER_REMOTE_HOST, netsender_endpoint::VARS, this->mac, this->config.dkey);
 
-    // Initialise the request.
-    esp_http_client_config_t http_config = {
-        .url = url,
-        .method = HTTP_METHOD_GET,
-        .disable_auto_redirect = true,
-        .event_handler = http_event_handler,
-        .user_data = this->resp_buf,
-    };
-    auto http_handle = esp_http_client_init(&http_config);
+    using namespace std::chrono_literals;
+    std::unique_lock<std::timed_mutex> lock(this->http_handle_mu, 500ms);
+
+    if (!lock.owns_lock()) {
+        // The http handle is busy.
+        ESP_LOGE(TAG, "Unable to acquire lock for vars request");
+        return ESP_FAIL;
+    }
+
+    auto err = esp_http_client_set_url(this->http_handle, url);
+    if (err != ESP_OK) {
+        lock.unlock();
+        return err;
+    }
+    err = esp_http_client_set_method(this->http_handle, HTTP_METHOD_GET);
+    if (err != ESP_OK) {
+        lock.unlock();
+        return err;
+    }
 
     // Send the request.
-    auto err = esp_http_client_perform(http_handle);
+    err = esp_http_client_perform(this->http_handle);
     if (err != ESP_OK) {
+        lock.unlock();
         return err;
     }
 
     // Check the status code.
     // TODO: Handle other status codes.
-    if (auto status_code = esp_http_client_get_status_code(http_handle) != 200) {
+    auto status_code = esp_http_client_get_status_code(this->http_handle);
+    if (status_code != 200) {
+        lock.unlock();
         ESP_LOGE(TAG, "got non 200 status code: %d", status_code);
         return ESP_FAIL;
     }
@@ -642,6 +711,9 @@ esp_err_t Netsender::req_vars()
     ESP_LOGI(TAG, "vars response: %s", this->resp_buf);
     std::string vs;
     const auto resp = std::string(resp_buf);
+
+    // Release the lock on the HTTP client handle.
+    lock.unlock();
 
     err = this->parse_variable_callback(resp);
     if (err != ESP_OK) {
@@ -655,9 +727,6 @@ esp_err_t Netsender::req_vars()
         // Update varsum with new varsum.
         this->varsum = std::stoi(vs);
     }
-
-    // Cleanup http_handle.
-    ESP_ERROR_CHECK(esp_http_client_cleanup(http_handle));
 
     return ESP_OK;
 }
