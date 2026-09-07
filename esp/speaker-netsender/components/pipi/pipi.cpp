@@ -31,22 +31,22 @@
 
 #include <cerrno>
 #include <chrono>
+#include <cinttypes>
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
-#include <fstream>
-#include <ostream>
+#include <sys/_default_fcntl.h>
 #include <sys/stat.h>
+#include <sys/unistd.h>
 
 #include "esp_err.h"
-#include "esp_log.h"
 
 // Logging Tag.
 static constexpr auto TAG = "Pipi";
 
 Pipi::Entry::Entry(const int64_t ts, const Level level, const char *msg) : timestamp(ts), level(level), data(msg) {}
 
-esp_err_t Pipi::Entry::write(std::ostream &stream)
+esp_err_t Pipi::Entry::write(int fd)
 {
     int len = strlen(data);
     if (len > this->MAX_LOG_LENGTH) {
@@ -59,20 +59,20 @@ esp_err_t Pipi::Entry::write(std::ostream &stream)
     auto LevelStrings = {"info", "warn", "error", "fatal"};
 
     char marshalled[Pipi::Entry::MAX_LOG_LENGTH + 100];
-    auto written = snprintf(marshalled, Pipi::Entry::MAX_LOG_LENGTH + 100,
-                            "{"
-                            "\"caller\":\"speaker-netsender\","
-                            "\"timestamp\":%" PRId64 ","
-                            "\"level\":\"%s\","
-                            "\"message\":\"%s\""
-                            "}\n",
-                            this->timestamp, LevelStrings.begin()[this->level], this->data);
-    if (written < 0 || written >= sizeof(marshalled)) {
+    auto marshalled_len = snprintf(marshalled, Pipi::Entry::MAX_LOG_LENGTH + 100,
+                                   "{"
+                                   "\"caller\":\"speaker-netsender\","
+                                   "\"timestamp\":%" PRId64 ","
+                                   "\"level\":\"%s\","
+                                   "\"message\":\"%s\""
+                                   "}\n",
+                                   this->timestamp, LevelStrings.begin()[this->level], this->data);
+    if (marshalled_len < 0 || marshalled_len >= sizeof(marshalled)) {
         return ESP_FAIL;
     }
 
-    stream.write(marshalled, written);
-    if (stream.fail()) {
+    auto written = ::write(fd, marshalled, marshalled_len);
+    if (written != marshalled_len) {
         return ESP_FAIL;
     }
     return ESP_OK;
@@ -82,7 +82,7 @@ esp_err_t Pipi::FileLogger::make_path(const char *path)
 {
     auto path_len = strnlen(path, MAX_PATH_LENGTH + 1);
     if (path_len > MAX_PATH_LENGTH - 1) {
-        ESP_LOGE(TAG, "path too long");
+        printf("%s: path too long", TAG);
         return ESP_FAIL;
     }
 
@@ -103,7 +103,7 @@ esp_err_t Pipi::FileLogger::make_path(const char *path)
 
         auto status = mkdir(parent, 0777);
         if (status == -1 && errno != EEXIST) {
-            ESP_LOGE(TAG, "unable to create dir (%s): %d (%s)", parent, errno, strerror(errno));
+            printf("%s: unable to create dir (%s): %d (%s)", TAG, parent, errno, strerror(errno));
             return ESP_FAIL;
         }
     }
@@ -111,7 +111,7 @@ esp_err_t Pipi::FileLogger::make_path(const char *path)
     return ESP_OK;
 }
 
-Pipi::FileLogger::FileLogger(const char *path) : ready(false)
+Pipi::FileLogger::FileLogger(const char *path) : curr_file(-1), prev_file(-1), ready(false)
 {
     // Validate the path is a directory.
     const char *resolved = (path != nullptr && path[0] != '\0') ? path : DEFAULT_PATH;
@@ -125,7 +125,7 @@ Pipi::FileLogger::FileLogger(const char *path) : ready(false)
         // Directory doesn't exist so create it.
         auto err = make_path(resolved);
         if (err != ESP_OK) {
-            ESP_LOGE(TAG, "unable to create path");
+            printf("%s: unable to create path", TAG);
             return;
         }
         strncpy(this->path, resolved, this->MAX_PATH_LENGTH);
@@ -134,7 +134,7 @@ Pipi::FileLogger::FileLogger(const char *path) : ready(false)
     // Start a new logging file.
     auto err = this->new_file();
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "unable to start new logfile: %s", esp_err_to_name(err));
+        printf("%s: unable to start new logfile: %s", TAG, esp_err_to_name(err));
         return;
     }
 
@@ -145,23 +145,24 @@ Pipi::FileLogger::FileLogger() : Pipi::FileLogger(DEFAULT_PATH) {}
 
 esp_err_t Pipi::FileLogger::new_file()
 {
-    if (this->prev_file.is_open()) {
-        this->prev_file.close();
-    }
-    if (this->curr_file.is_open()) {
-        this->curr_file.close();
-        this->prev_file.open(curr_file_path);
-        if (!this->prev_file.is_open()) {
-            ESP_LOGE(TAG, "unable to open previous file as ifstream");
+    if (this->prev_file >= 0) {
+        if (::close(this->prev_file) != 0) {
+            printf("%s: unable to close previous file: %s (%d)", TAG, strerror(errno), errno);
             return ESP_FAIL;
         }
+        this->prev_file = -1;
+    }
+    if (this->curr_file >= 0) {
+        this->prev_file = this->curr_file;
+        this->curr_file = -1;
     }
 
-    snprintf(this->curr_file_path, MAX_PATH_LENGTH, "%s/%" PRId64 ".log", this->path, time(nullptr));
-    this->curr_file.open(this->curr_file_path, std::ios::out);
-
-    if (!this->curr_file.is_open()) {
-        ESP_LOGE(TAG, "unable to open log file: %s", this->curr_file_path);
+    static int log_counter = 0;
+    snprintf(this->curr_file_path, MAX_PATH_LENGTH, "%s/test_%d.log", this->path, log_counter++);
+    this->curr_file = ::open(this->curr_file_path, O_CREAT | O_RDWR | O_TRUNC);
+    if (this->curr_file < 0) {
+        printf("%s: unable to open new file (%s): %s (%d)", TAG, this->curr_file_path, strerror(errno), errno);
+        this->curr_file = -1;
         return ESP_FAIL;
     }
 
@@ -204,19 +205,25 @@ esp_err_t Pipi::FileLogger::log(char *msg)
     return e.write(curr_file);
 }
 
-std::ifstream &Pipi::FileLogger::get_logs()
+int Pipi::FileLogger::get_logs()
 {
-    this->new_file();
+    ESP_ERROR_CHECK(this->new_file());
     return this->prev_file;
 }
 
 void Pipi::FileLogger::close()
 {
-    if (this->curr_file.is_open()) {
-        this->curr_file.close();
+    if (this->prev_file >= 0) {
+        if (::close(this->prev_file) != 0) {
+            printf("%s: unable to close previous file: %s (%d)", TAG, strerror(errno), errno);
+        }
+        this->prev_file = -1;
     }
-    if (this->prev_file.is_open()) {
-        this->prev_file.close();
+    if (this->curr_file >= 0) {
+        if (::close(this->curr_file) != 0) {
+            printf("%s: unable to close current file: %s (%d)", TAG, strerror(errno), errno);
+        }
+        this->curr_file = -1;
     }
     this->ready = false;
 }

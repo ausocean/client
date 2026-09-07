@@ -30,7 +30,29 @@ Alternatively this can also be run manually via the command line:
 clang-tidy --fix <filepath>
 ```
 
-**Keeping includes that clang-tidy wants to remove:**
+## Running the Pipi host tests
+
+The `pipi` logging component has host tests that build and run natively on your Linux machine, so no ESP32 hardware is required. They live in `components/pipi/host_tests/test_pipi` and are a gtest-based ESP-IDF project that targets the `linux` host.
+
+In addition to the ESP-IDF setup described above, your ESP-IDF installation must ship the clang Linux toolchain (`tools/cmake/toolchain-clang-linux.cmake`), as the tests are built with the clang toolchain. The `clang`, `clang++` and `lld` binaries also need to be installed on your system.
+
+To build and run the tests:
+
+```sh
+cd components/pipi/host_tests/test_pipi
+idf.py build
+./build/test_pipi.elf
+```
+
+The test target is already pinned to `linux` in the committed `sdkconfig`, so no `set-target` step is required. Run the tests from the `test_pipi` directory, as the suite creates and `chdir`s into a `test/` subdirectory to isolate its log files. Individual tests can be selected with gtest flags, e.g.:
+
+```sh
+./build/test_pipi.elf --gtest_filter=TestEntry.*
+```
+
+Note that some ESP-IDF point releases do not include `toolchain-clang-linux.cmake` (e.g. v6.0.2), which will cause the build to fail with a "toolchain file not found" error. If that happens, use an ESP-IDF version that provides it.
+
+## Keeping includes that clang-tidy wants to remove:
 
 clang-tidy sometimes suggests removing ESP-IDF driver headers that are actually needed
 as direct includes, because it can see them transitively through other headers.

@@ -26,11 +26,9 @@
 #pragma once
 
 #include <cstdarg>
-#include <fstream>
 #ifdef RUNNING_UNIT_TESTS
 #include <gtest/gtest_prod.h>
 #endif
-#include <ostream>
 
 #include "esp_err.h"
 
@@ -68,15 +66,14 @@ class Entry {
     Entry(const int64_t ts, const Level level, const char *msg);
 
     /**
-     * @brief write JSON formatted Entry to stream.
+     * @brief write JSON formatted Entry to file.
      *
-     * Writing the Entry to the given stream will format the entry as a single
-     * JSON entity to write to the stream.
+     * Writing the Entry to the given file will format the entry as a single
+     * JSON entity to write to the file.
      *
-     * @param[in] stream an output stream such as a file to write the formatted
-     * log to
+     * @param[in] file a file descriptor to write the formatted log to.
      */
-    esp_err_t write(std::ostream &stream);
+    esp_err_t write(const int fd);
 
   private:
 #ifdef RUNNING_UNIT_TESTS
@@ -148,7 +145,7 @@ class FileLogger {
      *
      * NOTE: The caller should not close this file.
      */
-    std::ifstream &get_logs();
+    int get_logs();
 
   private:
 #ifdef RUNNING_UNIT_TESTS
@@ -171,7 +168,7 @@ class FileLogger {
     /**
      * @brief current logging file.
      */
-    std::ofstream curr_file;
+    int curr_file;
 
     /**
      * @brief path to current log file.
@@ -181,7 +178,7 @@ class FileLogger {
     /**
      * @brief previous logging file.
      */
-    std::ifstream prev_file;
+    int prev_file;
 
     /**
      * @brief path for log files.

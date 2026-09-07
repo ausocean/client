@@ -27,9 +27,11 @@
 #include "include/log.hpp"
 
 #include <cstdint>
+#include <cstring>
 #include <functional>
 #include <memory>
 #include <optional>
+#include <sys/unistd.h>
 #include <vector>
 
 #include "esp_err.h"
@@ -128,24 +130,30 @@ std::function<std::optional<std::vector<uint8_t>>()> init_logging()
         return NULL;
     }
 
-    default_vprintf = esp_log_set_vprintf(log_vprintf);
-
     p = std::make_unique<Pipi::FileLogger>("/sdcard/logs");
 
+    default_vprintf = esp_log_set_vprintf(log_vprintf);
+
     return []() -> std::optional<std::vector<uint8_t>> {
-        auto &stream = p->get_logs();
+        auto logs_fd = p->get_logs();
 
-        std::vector<uint8_t> buffer(1024); // Allocate space for logs
-
-        // Read logs from stream into buffer
-        stream.read(reinterpret_cast<char *>(buffer.data()), buffer.size());
-
-        auto bytes_read = stream.gcount();
-        if (bytes_read == 0) {
+        if (::lseek(logs_fd, 0, SEEK_SET) == -1) {
+            ESP_LOGE(TAG, "unable to seek logs: %s (%d)", strerror(errno), errno);
+            ::close(logs_fd);
             return std::nullopt;
         }
 
-        buffer.resize(bytes_read); // Shrink to actual payload size
+        std::vector<uint8_t> buffer(1024);
+
+        // Read logs from stream into buffer
+        auto bytes_read = ::read(logs_fd, buffer.data(), buffer.size());
+        if (bytes_read == -1) {
+            ESP_LOGE(TAG, "unable to read logs into buffer: %s (%d)", strerror(errno), errno);
+            return std::nullopt;
+        }
+
+        buffer.resize(static_cast<size_t>(bytes_read));
+
         return buffer;
     };
 }
