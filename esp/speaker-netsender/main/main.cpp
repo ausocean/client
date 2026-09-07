@@ -44,6 +44,7 @@
 #include "include/sd.hpp"
 #include "include/self_check.hpp"
 #include "include/time.hpp"
+#include "log.hpp"
 #include "netsender.hpp"
 #include "ota_tcp.hpp"
 #include "tas5805.hpp"
@@ -141,6 +142,12 @@ void app_main(void)
     ESP_LOGI(TAG, "Initialising SNTP");
     initialise_sntp();
     ESP_LOGI(TAG, "SNTP Initialised");
+
+    ESP_LOGI(TAG, "Initialising Logging");
+    auto read_bin_func = init_logging();
+    char log_pin_name[4] = "T0";
+    ns.register_binary_input(log_pin_name, read_bin_func);
+    ESP_LOGI(TAG, "Logging Initialised");
 
     ESP_LOGI(TAG, "Initialising OTA listener");
     init_ota_tcp();

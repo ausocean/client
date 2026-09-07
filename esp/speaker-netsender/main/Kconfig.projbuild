@@ -68,7 +68,7 @@ menu "Amplifier"
         int "AMP I2C Address"
         range 0 127
         # The default amp address is 0x2D (45)
-        default 45 
+        default 45
         help
             I2C address of the attached Amplifier.
 
@@ -99,7 +99,7 @@ menu "Amplifier"
         default 18
         help
             SCL Pin GPIO number.
-    
+
     endmenu
 
     menu "I2S Settings"
@@ -117,7 +117,7 @@ menu "Amplifier"
         default 32
         help
             WS (LRCLK) GPIO number
-        
+
         config AMP_I2S_DOUT
         int "I2S Data Out GPIO Pin number"
         range 1 255
@@ -152,5 +152,23 @@ menu "Amplifier"
             default 96000 if AMP_I2S_SAMPLE_RATE_96000
 
     endmenu
+
+endmenu
+
+menu "Logging"
+
+    config LOG_LEN
+    int "Log line length"
+    range 64 512
+    default 128
+    help
+        The maximum length of string for a single entry.
+
+    config LOG_QUEUE_LEN
+    int "Logging queue length"
+    range 64 512
+    default 64
+    help
+        The maximum number of logs to be stored in the queue. Any additional logs will be dropped until the queue frees space.
 
 endmenu

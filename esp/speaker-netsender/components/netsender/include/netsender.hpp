@@ -29,13 +29,17 @@
 
 #pragma once
 
+#include <cstdint>
 #include <functional>
+#include <mutex>
 #include <optional>
 #include <stddef.h>
 #include <stdint.h>
 #include <string>
+#include <vector>
 
 #include "esp_err.h"
+#include "esp_http_client.h"
 
 #include "sdkconfig.h"
 
@@ -116,7 +120,9 @@ struct netsender_configuration_t {
 struct netsender_pin_t {
     char name[NETSENDER_PIN_SIZE];
     std::function<std::optional<int64_t>()> read;
+    std::function<std::optional<std::vector<uint8_t>>()> read_binary;
     std::optional<int64_t> value;
+    std::vector<uint8_t> data_storage;
     uint8_t *data;
 };
 
@@ -142,6 +148,11 @@ class Netsender {
      * @brief append a read function and associated pin.
      */
     esp_err_t register_input(char *pin_name, std::function<std::optional<int64_t>()> read_func);
+
+    /**
+     * @brief append a binary read function to an associated pin.
+     */
+    esp_err_t register_binary_input(char *pin_name, std::function<std::optional<std::vector<uint8_t>>()> read_func);
 
     /**
      * @brief register a callback to handle variable parsing.
@@ -176,6 +187,21 @@ class Netsender {
      * Netsender has been configured.
      */
     bool configured;
+
+    /**
+     * Persistent handle for http requests.
+     */
+    esp_http_client_handle_t http_handle;
+
+    /**
+     * Mutex for persistent http_handle.
+     */
+    std::timed_mutex http_handle_mu;
+
+    /**
+     * @brief init function for http_handle.
+     */
+    esp_err_t init_http_handle();
 
     /**
      * Latest varsum value.

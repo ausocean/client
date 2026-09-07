@@ -756,6 +756,15 @@ CONFIG_AMP_I2S_SAMPLE_RATE=44100
 # end of Amplifier
 
 #
+# Logging
+#
+# default:
+CONFIG_LOG_LEN=128
+# default:
+CONFIG_LOG_QUEUE_LEN=64
+# end of Logging
+
+#
 # Netsender
 #
 # default:
