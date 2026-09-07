@@ -44,7 +44,7 @@ idf.py build
 ./build/test_pipi.elf
 ```
 
-The test target is already pinned to `linux` in the committed `sdkconfig`, so no `set-target` step is required. Run the tests from the `test_pipi` directory, as the suite creates and `chdir`s into a `test/` subdirectory to isolate its log files. Individual tests can be selected with gtest flags, e.g.:
+The test target is already pinned to `linux` in the committed `sdkconfig`, so no `set-target` step is required. The project's `CMakeLists.txt` enables the local `gtest` component (defining `RUNNING_UNIT_TESTS`) automatically. Run the tests from the `test_pipi` directory, as the suite creates and `chdir`s into a `test/` subdirectory to isolate its log files. Individual tests can be selected with gtest flags, e.g.:
 
 ```sh
 ./build/test_pipi.elf --gtest_filter=TestEntry.*

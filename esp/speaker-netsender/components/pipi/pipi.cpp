@@ -35,9 +35,9 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
-#include <sys/_default_fcntl.h>
+#include <fcntl.h>
 #include <sys/stat.h>
-#include <sys/unistd.h>
+#include <unistd.h>
 
 #include "esp_err.h"
 

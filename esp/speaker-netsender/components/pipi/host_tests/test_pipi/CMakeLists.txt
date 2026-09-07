@@ -1,10 +1,15 @@
 cmake_minimum_required(VERSION 3.16)
 
+# This is a dedicated host test application, so always enable the gtest
+# component, regardless of any cached ENABLE_TESTS value.
+set(ENABLE_TESTS ON CACHE BOOL "Enable GoogleTest unit tests" FORCE)
+
 # Append extra component directories so IDF can find our local components.
 list(APPEND EXTRA_COMPONENT_DIRS
     "../../../"         # Project component directory.
 )
 
+# RUNNING_UNIT_TESTS is used by pipi to expose internals to the test fixtures.
 if(ENABLE_TESTS)
     add_compile_definitions(RUNNING_UNIT_TESTS)
 endif()
