@@ -58,6 +58,7 @@ const (
 	RequestAct
 	RequestVars
 	RequestMts
+	RequestMtsV2
 )
 
 // Service response codes.
@@ -198,7 +199,7 @@ type PinReadWrite func(pin *Pin) error
 // local consts
 const (
 	pkgName         = "netsender"
-	version         = 173
+	version         = 174
 	defaultService  = "data.cloudblue.org"
 	monPeriod       = 60
 	rebooter        = "syncreboot"
@@ -248,7 +249,7 @@ var rebootTime = time.Now()
 var (
 	configParams  = []string{"ma", "dk", "wi", "ip", "op", "mp", "ap", "ct", "cv", "hw", "sh"}
 	configNumbers = []string{"dk", "mp", "ap"}
-	requestTypes  = []string{"default", "config", "poll", "act", "vars", "mts"}
+	requestTypes  = []string{"default", "config", "poll", "act", "vars", "mts", "v2/mts"}
 )
 
 // New returns a pointer to newly instantiated and intialized Netsender instance
@@ -571,7 +572,7 @@ func (ns *Sender) Send(requestType int, pins []Pin, opts ...SendOption) (reply s
 	rc = ResponseNone
 
 	switch requestType {
-	case RequestPoll, RequestMts, RequestAct, RequestConfig, RequestVars:
+	case RequestPoll, RequestMts, RequestMtsV2, RequestAct, RequestConfig, RequestVars:
 		path = fmt.Sprintf("/%s?vn=%d&ma=%s&dk=%s&ut=%d", requestTypes[requestType], version, ns.Param("ma"), ns.Param("dk"), uptime)
 
 	default:
@@ -633,7 +634,7 @@ func (ns *Sender) Send(requestType int, pins []Pin, opts ...SendOption) (reply s
 	}
 
 	// We don't expect a varsum in response to mts requests.
-	if requestType == RequestMts {
+	if requestType == RequestMts || requestType == RequestMtsV2 {
 		return reply, rc, nil
 	}
 
