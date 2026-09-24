@@ -15,7 +15,7 @@ for current issues, or creation of an issue.
 
 # License
 
-Copyright (C) 2017-2024 the Australian Ocean Lab (AusOcean).
+Copyright (C) 2017-2026 the Australian Ocean Lab (AusOcean).
 
 This is free software: you can redistribute it and/or modify them
 under the terms of the GNU General Public License as published by the
