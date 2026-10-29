@@ -114,6 +114,10 @@ esp_err_t init_log_queue()
 static std::optional<std::vector<uint8_t>> read_logs()
 {
     auto logs_fd = p->get_logs();
+    if (logs_fd < 0) {
+        ESP_LOGE(TAG, "unable to open a log file for reading");
+        return std::nullopt;
+    }
 
     if (::lseek(logs_fd, 0, SEEK_SET) == -1) {
         ESP_LOGE(TAG, "unable to seek logs: %s (%d)", strerror(errno), errno);

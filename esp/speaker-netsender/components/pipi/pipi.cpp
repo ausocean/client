@@ -40,6 +40,7 @@
 #include <unistd.h>
 
 #include "esp_err.h"
+#include "esp_log.h"
 
 // Logging Tag.
 static constexpr auto TAG = "Pipi";
@@ -207,7 +208,11 @@ esp_err_t Pipi::FileLogger::log(char *msg)
 
 int Pipi::FileLogger::get_logs()
 {
-    ESP_ERROR_CHECK(this->new_file());
+    auto err = this->new_file();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "unable to start new log file: %s", esp_err_to_name(err));
+        return -1;
+    }
     return this->prev_file;
 }
 
