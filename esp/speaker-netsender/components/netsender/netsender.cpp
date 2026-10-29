@@ -213,8 +213,7 @@ constexpr void Netsender::print_config() const
     }
 }
 
-esp_err_t Netsender::register_input(char pin_name[NETSENDER_PIN_SIZE],
-                                    std::function<std::optional<int64_t>()> read_func)
+esp_err_t Netsender::register_input(char pin_name[NETSENDER_PIN_SIZE], pin_read_fn read_func)
 {
     if (input_cnt >= CONFIG_NETSENDER_MAX_PINS) {
         ESP_LOGE(TAG, "cannot register more than %d inputs", CONFIG_NETSENDER_MAX_PINS);
@@ -233,8 +232,7 @@ esp_err_t Netsender::register_input(char pin_name[NETSENDER_PIN_SIZE],
     return ESP_OK;
 }
 
-esp_err_t Netsender::register_binary_input(char pin_name[NETSENDER_PIN_SIZE],
-                                           std::function<std::optional<std::vector<uint8_t>>()> read_binary_func)
+esp_err_t Netsender::register_binary_input(char pin_name[NETSENDER_PIN_SIZE], pin_read_binary_fn read_binary_func)
 {
     if (input_cnt >= CONFIG_NETSENDER_MAX_PINS) {
         ESP_LOGE(TAG, "cannot register more than %d inputs", CONFIG_NETSENDER_MAX_PINS);
@@ -253,7 +251,7 @@ esp_err_t Netsender::register_binary_input(char pin_name[NETSENDER_PIN_SIZE],
     return ESP_OK;
 }
 
-esp_err_t Netsender::register_variable_parser(std::function<esp_err_t(const char *)> parser_func)
+esp_err_t Netsender::register_variable_parser(variable_parser_fn parser_func)
 {
     ESP_LOGD(TAG, "registering new variable callback");
 
@@ -539,7 +537,7 @@ esp_err_t Netsender::req_poll()
 
     for (auto i = 0; i < input_cnt; i++) {
         auto &pin = inputs[i];
-        if (pin.read != NULL) {
+        if (pin.read != nullptr) {
             // Read non-binary pins.
             pin.value = pin.read();
             if (!pin.value.has_value()) {
@@ -548,7 +546,7 @@ esp_err_t Netsender::req_poll()
             }
             ESP_LOGI(TAG, "read non-binary pin %s: %d", pin.name, pin.value.value());
             pin.data = NULL;
-        } else if (pin.read_binary != NULL) {
+        } else if (pin.read_binary != nullptr) {
             // Read binary pins.
             auto out = pin.read_binary();
             if (!out.has_value()) {

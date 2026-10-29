@@ -28,7 +28,6 @@
 
 #include <cstdint>
 #include <cstring>
-#include <functional>
 #include <memory>
 #include <optional>
 #include <sys/unistd.h>
@@ -112,13 +111,37 @@ esp_err_t init_log_queue()
     return ESP_OK;
 }
 
-std::function<std::optional<std::vector<uint8_t>>()> init_logging()
+static std::optional<std::vector<uint8_t>> read_logs()
+{
+    auto logs_fd = p->get_logs();
+
+    if (::lseek(logs_fd, 0, SEEK_SET) == -1) {
+        ESP_LOGE(TAG, "unable to seek logs: %s (%d)", strerror(errno), errno);
+        ::close(logs_fd);
+        return std::nullopt;
+    }
+
+    std::vector<uint8_t> buffer(1024);
+
+    // Read logs from stream into buffer
+    auto bytes_read = ::read(logs_fd, buffer.data(), buffer.size());
+    if (bytes_read == -1) {
+        ESP_LOGE(TAG, "unable to read logs into buffer: %s (%d)", strerror(errno), errno);
+        return std::nullopt;
+    }
+
+    buffer.resize(static_cast<size_t>(bytes_read));
+
+    return buffer;
+}
+
+log_read_fn init_logging()
 {
     // Initialise queue.
     auto err = init_log_queue();
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "unable to init log queue: %s", esp_err_to_name(err));
-        return NULL;
+        return nullptr;
     }
 
     // Initialise UDP logging.
@@ -127,33 +150,12 @@ std::function<std::optional<std::vector<uint8_t>>()> init_logging()
     // Start logging task.
     if (xTaskCreatePinnedToCore(log_processor_task, "logging_task", 4096, NULL, 5, NULL, 1) != pdPASS) {
         ESP_LOGE(TAG, "log task creation failed");
-        return NULL;
+        return nullptr;
     }
 
     p = std::make_unique<Pipi::FileLogger>("/sdcard/logs");
 
     default_vprintf = esp_log_set_vprintf(log_vprintf);
 
-    return []() -> std::optional<std::vector<uint8_t>> {
-        auto logs_fd = p->get_logs();
-
-        if (::lseek(logs_fd, 0, SEEK_SET) == -1) {
-            ESP_LOGE(TAG, "unable to seek logs: %s (%d)", strerror(errno), errno);
-            ::close(logs_fd);
-            return std::nullopt;
-        }
-
-        std::vector<uint8_t> buffer(1024);
-
-        // Read logs from stream into buffer
-        auto bytes_read = ::read(logs_fd, buffer.data(), buffer.size());
-        if (bytes_read == -1) {
-            ESP_LOGE(TAG, "unable to read logs into buffer: %s (%d)", strerror(errno), errno);
-            return std::nullopt;
-        }
-
-        buffer.resize(static_cast<size_t>(bytes_read));
-
-        return buffer;
-    };
+    return read_logs;
 }
