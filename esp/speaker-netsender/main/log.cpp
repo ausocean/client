@@ -29,8 +29,8 @@
 #include <cstdint>
 #include <cstring>
 #include <memory>
+#include <mutex>
 #include <optional>
-#include <sys/unistd.h>
 #include <vector>
 
 #include "esp_err.h"
@@ -49,12 +49,26 @@ static constexpr auto TAG = "log";
 // Queue item size (max CONFIG_LOG_LEN characters per line)
 static constexpr auto QUEUE_ITEM_SIZE = CONFIG_LOG_LEN * sizeof(char);
 
+// Logging is kept off the audio core and below the audio task priority.
+static constexpr const auto LOG_TASK_CORE = 0;
+static constexpr const auto LOG_TASK_PRIORITY = 2;
+
+// Logs waiting to be uploaded are kept in RAM so the HTTP poll path never
+// touches the SD card.
+static constexpr const auto LOG_UPLOAD_BUF_SIZE = 8192;
+static constexpr const auto LOG_JSON_MAX = 512;
+static constexpr const auto LOG_ROTATE_COUNT = 512;
+
 // Storage buffer for logs.
 static uint8_t queue_storage[CONFIG_LOG_QUEUE_LEN * (QUEUE_ITEM_SIZE)];
 static StaticQueue_t queue_buf;
 QueueHandle_t log_queue = NULL;
 
 std::unique_ptr<Pipi::FileLogger> p;
+
+static char upload_buf[LOG_UPLOAD_BUF_SIZE];
+static size_t upload_len = 0;
+static std::mutex upload_mutex;
 
 // Original vprintf handler so we can still print directly to stdout/serial
 static vprintf_like_t default_vprintf = nullptr;
@@ -86,12 +100,30 @@ static int log_vprintf(const char *fmt, va_list args)
 static void log_processor_task(void *pvParameters)
 {
     char msg[CONFIG_LOG_LEN];
+    char json[LOG_JSON_MAX];
+    uint32_t logs_since_rotate = 0;
 
     while (true) {
         // Block until a new log message arrives in the queue.
         if (xQueueReceive(log_queue, msg, portMAX_DELAY) == pdTRUE) {
             udp_log_send(msg);
-            p->log(msg);
+
+            auto err = p->log(msg, json, sizeof(json));
+            if (err == ESP_OK && json[0] != '\0') {
+                const auto len = strlen(json);
+                std::lock_guard<std::mutex> lock(upload_mutex);
+                if (upload_len + len <= sizeof(upload_buf)) {
+                    memcpy(upload_buf + upload_len, json, len);
+                    upload_len += len;
+                }
+            }
+
+            // Rotate the on-disk log periodically. Uploading is served from
+            // the RAM buffer above, so this does not affect the HTTP path.
+            if (++logs_since_rotate >= LOG_ROTATE_COUNT) {
+                logs_since_rotate = 0;
+                p->get_logs();
+            }
         }
     }
 }
@@ -113,29 +145,9 @@ esp_err_t init_log_queue()
 
 static std::optional<std::vector<uint8_t>> read_logs()
 {
-    auto logs_fd = p->get_logs();
-    if (logs_fd < 0) {
-        ESP_LOGE(TAG, "unable to open a log file for reading");
-        return std::nullopt;
-    }
-
-    if (::lseek(logs_fd, 0, SEEK_SET) == -1) {
-        ESP_LOGE(TAG, "unable to seek logs: %s (%d)", strerror(errno), errno);
-        ::close(logs_fd);
-        return std::nullopt;
-    }
-
-    std::vector<uint8_t> buffer(1024);
-
-    // Read logs from stream into buffer
-    auto bytes_read = ::read(logs_fd, buffer.data(), buffer.size());
-    if (bytes_read == -1) {
-        ESP_LOGE(TAG, "unable to read logs into buffer: %s (%d)", strerror(errno), errno);
-        return std::nullopt;
-    }
-
-    buffer.resize(static_cast<size_t>(bytes_read));
-
+    std::lock_guard<std::mutex> lock(upload_mutex);
+    std::vector<uint8_t> buffer(upload_buf, upload_buf + upload_len);
+    upload_len = 0;
     return buffer;
 }
 
@@ -152,7 +164,8 @@ log_read_fn init_logging()
     init_udp_logging();
 
     // Start logging task.
-    if (xTaskCreatePinnedToCore(log_processor_task, "logging_task", 4096, NULL, 5, NULL, 1) != pdPASS) {
+    if (xTaskCreatePinnedToCore(log_processor_task, "logging_task", 4096, NULL, LOG_TASK_PRIORITY, NULL,
+                                LOG_TASK_CORE) != pdPASS) {
         ESP_LOGE(TAG, "log task creation failed");
         return nullptr;
     }
