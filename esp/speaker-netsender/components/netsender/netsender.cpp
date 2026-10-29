@@ -63,7 +63,6 @@
 #include "portmacro.h"
 #include "sdkconfig.h"
 
-static constexpr const auto MAX_HTTP_RECV_BUFFER = 512;
 static constexpr const auto MAX_URL_LEN = 256;
 static constexpr const auto STORAGE_NAMESPACE = "netsender";
 static constexpr const auto CONFIG_NVS_KEY = "config";
