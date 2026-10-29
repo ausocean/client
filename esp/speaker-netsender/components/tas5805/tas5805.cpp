@@ -143,8 +143,8 @@ esp_err_t TAS5805::prepare_buffers()
 
     // The I2S descriptor and buffers must be DMA capable.
     if (i2s_buf == nullptr) {
-        i2s_buf = static_cast<int16_t *>(
-            heap_caps_malloc(SAMPLES_PER_READ * MAX_CHANNELS * sizeof(int16_t), MALLOC_CAP_DMA));
+        i2s_buf =
+            static_cast<int16_t *>(heap_caps_malloc(SAMPLES_PER_READ * MAX_CHANNELS * sizeof(int16_t), MALLOC_CAP_DMA));
     }
 
     if (fs_buf == nullptr || file_buf == nullptr || i2s_buf == nullptr) {
