@@ -80,7 +80,7 @@ def generate_header(json_path: str, output_path: str) -> None:
     with open(output_path, "w") as f:
         # Add includes.
         f.write(
-            '#pragma once\n#include <array>\n#include <cstdio>\n#include <optional>\n#include <string>\n#include <cstring>\n\n#include "esp_err.h"\n#include "esp_log.h"\n\n'
+            '#pragma once\n#include <algorithm>\n#include <array>\n#include <charconv>\n#include <cstdio>\n#include <cstring>\n#include <optional>\n#include <string_view>\n\n#include "esp_err.h"\n#include "esp_log.h"\n\n'
         )
         f.write(f"// Generated for {client_name} {latest_version}\n\n")
 
@@ -125,9 +125,16 @@ def generate_header(json_path: str, output_path: str) -> None:
                 f.write(f"    {c_type} {var['name']};\n")
         f.write("};\n\n")
 
-        # Add a helper function to parse the variables into the struct.
+        # Add helpers to parse the variables into the struct without allocating.
         f.write(
-            "inline void update_state_member(device_var_state_t& state, const std::string& var_id, const std::string& val) {"
+            "\ninline bool parse_int_var(std::string_view val, int32_t& out) {\n"
+            "    const auto* begin = val.data();\n"
+            "    const auto* end = begin + val.size();\n"
+            "    auto result = std::from_chars(begin, end, out);\n"
+            "    return result.ec == std::errc{} && result.ptr == end;\n"
+            "}\n\n"
+            "inline void update_state_member(device_var_state_t& state, std::string_view var_id, std::string_view val) {\n"
+            "    int32_t number = 0;\n"
         )
 
         first = True
@@ -138,19 +145,20 @@ def generate_header(json_path: str, output_path: str) -> None:
             f.write(f"{prefix} (var_id == var::VAR_ID_{var_name_upper}) {{\n")
 
             if var["type"] == VarType.BYTE:
-                f.write(f"state.{var['name']} = static_cast<char>(std::stoi(val));\n")
+                f.write("if (parse_int_var(val, number)) {\n")
+                f.write(f"    state.{var['name']} = static_cast<char>(number);\n")
+                f.write("}\n")
             elif var["type"] == VarType.STRING:
-                # Using strncpy and ensuring the last byte is always null for safety
+                # Copy at most the destination size and always null terminate.
                 f.write(
-                    f"strncpy(state.{var['name']}, val.c_str(), sizeof(state.{var['name']}) - 1);\n"
+                    f"const auto len = std::min(val.size(), sizeof(state.{var['name']}) - 1);\n"
                 )
-                f.write(
-                    f"state.{var['name']}[sizeof(state.{var['name']}) - 1] = '\\0';\n"
-                )
+                f.write(f"memcpy(state.{var['name']}, val.data(), len);\n")
+                f.write(f"state.{var['name']}[len] = '\\0';\n")
             elif var["type"] == VarType.INT32:
-                f.write(
-                    f"state.{var['name']} = static_cast<int32_t>(std::stoi(val));\n"
-                )
+                f.write("if (parse_int_var(val, number)) {\n")
+                f.write(f"    state.{var['name']} = number;\n")
+                f.write("}\n")
             first = False
 
         if not first:
@@ -160,9 +168,9 @@ def generate_header(json_path: str, output_path: str) -> None:
 
         # Generate the automated write function
         f.write(
-            "\ninline esp_err_t write_vars_to_file(const device_var_state_t &state, const std::string& file_path) {\n"
+            "\ninline esp_err_t write_vars_to_file(const device_var_state_t &state, const char* file_path) {\n"
         )
-        f.write('    FILE* fd = fopen(file_path.c_str(), "w");\n')
+        f.write('    FILE* fd = fopen(file_path, "w");\n')
         f.write("    if (fd == NULL) return ESP_FAIL;\n\n")
 
         for var in vars:
@@ -187,12 +195,12 @@ def generate_header(json_path: str, output_path: str) -> None:
 
         # Write the read function.
         f.write("""
-                inline std::optional<device_var_state_t> read_vars_from_file(const std::string& file_path)
+                inline std::optional<device_var_state_t> read_vars_from_file(const char* file_path)
                 {
                     device_var_state_t vars = {};
 
                     ESP_LOGI("NETSENDER_VARS", "opening file");
-                    FILE* fd = fopen(file_path.c_str(), "r");
+                    FILE* fd = fopen(file_path, "r");
                     if (fd == NULL) {
                         return std::nullopt;
                     }

@@ -35,7 +35,6 @@
 #include <optional>
 #include <stddef.h>
 #include <stdint.h>
-#include <string>
 #include <vector>
 
 #include "esp_err.h"
@@ -126,9 +125,11 @@ struct netsender_pin_t {
     uint8_t *data;
 };
 
-// extract_json gets a string or integer value from JSON.
+// extract_json gets a string or integer value from JSON, writing it to the
+// supplied fixed-size buffer. Returns false if the field is missing, malformed,
+// or does not fit in the output buffer.
 // NB: This is NOT a general-purpose JSON parser.
-bool netsender_extract_json(const std::string &json, const char *name, std::string &value);
+bool netsender_extract_json(const char *json, const char *name, char *out, size_t out_len);
 
 class Netsender {
   public:
@@ -159,7 +160,7 @@ class Netsender {
      *
      * @param parser_func callback function to be called with the var request response.
      */
-    esp_err_t register_variable_parser(std::function<esp_err_t(std::string)> parser_func);
+    esp_err_t register_variable_parser(std::function<esp_err_t(const char *)> parser_func);
 
     /**
      * @brief makes a request to get variables.
@@ -262,7 +263,7 @@ class Netsender {
     /**
      * @brief handles response codes from server request.
      */
-    esp_err_t handle_response_code(std::string rc);
+    esp_err_t handle_response_code(int32_t rc);
 
     /**
      * Read the config from non-volatile storage (NVS).
@@ -294,5 +295,5 @@ class Netsender {
     /**
      * @brief callback used to handle variable parsing.
      */
-    std::function<esp_err_t(std::string)> parse_variable_callback;
+    std::function<esp_err_t(const char *)> parse_variable_callback;
 };

@@ -30,7 +30,6 @@
 #include <cstdio>
 #include <cstring>
 #include <string.h>
-#include <string>
 
 #include "esp_err.h"
 #include "esp_log.h"
@@ -74,34 +73,33 @@ static TaskHandle_t player_handle;
 
 // Callback function to be registered with NetSender to parse vars response.
 // TODO: Consider if this should also be an auto-generated function.
-esp_err_t parse_vars(std::string var_resp)
+esp_err_t parse_vars(const char *var_resp)
 {
     ESP_LOGD(TAG, "parsing variables in callback");
 
     // Get the ID in the response.
-    std::string id;
-    auto has_id = netsender_extract_json(var_resp, "id", id);
+    constexpr const auto MAX_ID_LEN = 64;
+    char id[MAX_ID_LEN];
+    auto has_id = netsender_extract_json(var_resp, "id", id, sizeof(id));
     if (!has_id) {
         ESP_LOGE(TAG, "unable to get ID from var response");
         return ESP_FAIL;
     }
 
     // Parse the registered variables into the vars struct.
-    std::string val;
-    std::string var_name;
-    bool has_val;
+    char val[netsender::MAX_STR_VAR_LEN];
+    char var_name[MAX_ID_LEN + 1 + netsender::MAX_STR_VAR_LEN];
     for (auto i = 0; i < netsender::VAR_COUNT; i++) {
         if (strcmp(netsender::VARIABLES[i], netsender::var::VAR_ID_VS) == 0) {
             // Varsum (vs) is not prepended with id scope.
-            var_name = netsender::VARIABLES[i];
+            snprintf(var_name, sizeof(var_name), "%s", netsender::VARIABLES[i]);
         } else {
-            var_name = id + "." + netsender::VARIABLES[i];
+            snprintf(var_name, sizeof(var_name), "%s.%s", id, netsender::VARIABLES[i]);
         }
-        ESP_LOGI(TAG, "looking for variable: %s", var_name.c_str());
-        has_val = netsender_extract_json(var_resp, var_name.c_str(), val);
-        if (has_val) {
+        ESP_LOGI(TAG, "looking for variable: %s", var_name);
+        if (netsender_extract_json(var_resp, var_name, val, sizeof(val))) {
             netsender::update_state_member(vars, netsender::VARIABLES[i], val);
-            ESP_LOGI(TAG, "got variable: %s=%s", var_name.c_str(), val.c_str());
+            ESP_LOGI(TAG, "got variable: %s=%s", var_name, val);
         }
     }
 
@@ -192,7 +190,7 @@ void app_main(void)
             } else {
                 ESP_LOGE(TAG, "couldn't load new file, continuing with old file");
             }
-            strncpy(cur_audio_file, vars.FilePath, sizeof(cur_audio_file));
+            strlcpy(cur_audio_file, vars.FilePath, sizeof(cur_audio_file));
             amp.pause();
         }
 
