@@ -27,8 +27,11 @@
 #pragma once
 
 #include <cstdint>
-#include <functional>
 #include <optional>
+#include <vector>
+
+// Reads the latest unread log data, or returns nullopt on error.
+using log_read_fn = std::optional<std::vector<uint8_t>> (*)();
 
 /**
  * @brief initialise logging.
@@ -38,4 +41,4 @@
  * Initialises multi-output logging. This setup logs to file and via UDP.
  *
  */
-std::function<std::optional<std::vector<uint8_t>>()> init_logging();
+log_read_fn init_logging();

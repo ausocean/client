@@ -29,16 +29,19 @@
 
 #include "freertos/FreeRTOS.h" // IWYU pragma: keep
 
+#include <cerrno>
 #include <chrono>
+#include <climits>
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <ctype.h>
 #include <mutex>
 #include <ratio>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <string>
 #include <sys/param.h>
 #include <vector>
 
@@ -84,6 +87,25 @@ int check_pins(const char *names);
 // T, or X followed by one or two digits, or false otherwise. If len is
 // zero, the name must be null-terminated.
 bool is_valid_pin_name(const char *name, size_t len);
+
+// parse_int parses a complete, null-terminated base-10 integer without
+// throwing. It returns false on empty, malformed, or out-of-range input.
+static bool parse_int(const char *value, int32_t &out)
+{
+    if (value == nullptr || *value == '\0') {
+        return false;
+    }
+
+    char *end = nullptr;
+    errno = 0;
+    auto parsed = strtol(value, &end, 10);
+    if (errno != 0 || end == value || *end != '\0' || parsed < INT32_MIN || parsed > INT32_MAX) {
+        return false;
+    }
+
+    out = static_cast<int32_t>(parsed);
+    return true;
+}
 
 Netsender::Netsender()
 {
@@ -191,8 +213,7 @@ constexpr void Netsender::print_config() const
     }
 }
 
-esp_err_t Netsender::register_input(char pin_name[NETSENDER_PIN_SIZE],
-                                    std::function<std::optional<int64_t>()> read_func)
+esp_err_t Netsender::register_input(char pin_name[NETSENDER_PIN_SIZE], pin_read_fn read_func)
 {
     if (input_cnt >= CONFIG_NETSENDER_MAX_PINS) {
         ESP_LOGE(TAG, "cannot register more than %d inputs", CONFIG_NETSENDER_MAX_PINS);
@@ -211,8 +232,7 @@ esp_err_t Netsender::register_input(char pin_name[NETSENDER_PIN_SIZE],
     return ESP_OK;
 }
 
-esp_err_t Netsender::register_binary_input(char pin_name[NETSENDER_PIN_SIZE],
-                                           std::function<std::optional<std::vector<uint8_t>>()> read_binary_func)
+esp_err_t Netsender::register_binary_input(char pin_name[NETSENDER_PIN_SIZE], pin_read_binary_fn read_binary_func)
 {
     if (input_cnt >= CONFIG_NETSENDER_MAX_PINS) {
         ESP_LOGE(TAG, "cannot register more than %d inputs", CONFIG_NETSENDER_MAX_PINS);
@@ -231,7 +251,7 @@ esp_err_t Netsender::register_binary_input(char pin_name[NETSENDER_PIN_SIZE],
     return ESP_OK;
 }
 
-esp_err_t Netsender::register_variable_parser(std::function<esp_err_t(std::string)> parser_func)
+esp_err_t Netsender::register_variable_parser(variable_parser_fn parser_func)
 {
     ESP_LOGD(TAG, "registering new variable callback");
 
@@ -420,48 +440,62 @@ esp_err_t Netsender::req_config()
 
     bool changed = false;
 
-    // Parse the incoming config.
-    std::string param;
-    std::string json_resp(resp_buf);
-    lock.unlock();
-    if (netsender_extract_json(json_resp, "mp", param) && std::stoi(param) != this->config.monPeriod) {
-        this->config.monPeriod = std::stoi(param);
-        ESP_LOGI(TAG, "monPeriod changed: %d", this->config.monPeriod);
-        changed = true;
+    // Parse the incoming config from the fixed response buffer. A single
+    // buffer is large enough for every config field.
+    static_assert(NETSENDER_IO_SIZE >= NETSENDER_WIFI_SIZE, "config parameter buffer too small");
+    char param[NETSENDER_IO_SIZE];
+    int32_t number = 0;
+
+    if (netsender_extract_json(resp_buf, "mp", param, sizeof(param)) && parse_int(param, number) &&
+        number != this->config.monPeriod) {
+        if (number >= 0 && number <= SHRT_MAX) {
+            this->config.monPeriod = static_cast<short>(number);
+            ESP_LOGI(TAG, "monPeriod changed: %d", this->config.monPeriod);
+            changed = true;
+        } else {
+            ESP_LOGW(TAG, "invalid monPeriod: %ld", static_cast<long>(number));
+        }
     }
-    if (netsender_extract_json(json_resp, "ap", param) && std::stoi(param) != this->config.actPeriod) {
-        this->config.actPeriod = std::stoi(param);
-        ESP_LOGI(TAG, "actPeriod changed: %d", this->config.actPeriod);
-        changed = true;
+    if (netsender_extract_json(resp_buf, "ap", param, sizeof(param)) && parse_int(param, number) &&
+        number != this->config.actPeriod) {
+        if (number >= 0 && number <= SHRT_MAX) {
+            this->config.actPeriod = static_cast<short>(number);
+            ESP_LOGI(TAG, "actPeriod changed: %d", this->config.actPeriod);
+            changed = true;
+        } else {
+            ESP_LOGW(TAG, "invalid actPeriod: %ld", static_cast<long>(number));
+        }
     }
-    if (netsender_extract_json(json_resp, "wi", param) && param != this->config.wifi) {
-        pad_copy(this->config.wifi, param.c_str(), NETSENDER_WIFI_SIZE);
+    if (netsender_extract_json(resp_buf, "wi", param, sizeof(param)) && strcmp(param, this->config.wifi) != 0) {
+        pad_copy(this->config.wifi, param, NETSENDER_WIFI_SIZE);
         ESP_LOGI(TAG, "wifi changed: %s", this->config.wifi);
         changed = true;
     }
-    if (netsender_extract_json(json_resp, "dk", param) && param != this->config.dkey) {
-        pad_copy(this->config.dkey, param.c_str(), CONFIG_NETSENDER_DKEY_SIZE);
+    if (netsender_extract_json(resp_buf, "dk", param, sizeof(param)) && strcmp(param, this->config.dkey) != 0) {
+        pad_copy(this->config.dkey, param, CONFIG_NETSENDER_DKEY_SIZE);
         ESP_LOGI(TAG, "dkey changed: %s", this->config.dkey);
         changed = true;
     }
-    if (netsender_extract_json(json_resp, "ip", param) && param != this->config.inputs) {
-        if (check_pins(param.c_str()) >= 0) {
-            pad_copy(this->config.inputs, param.c_str(), NETSENDER_IO_SIZE);
+    if (netsender_extract_json(resp_buf, "ip", param, sizeof(param)) && strcmp(param, this->config.inputs) != 0) {
+        if (check_pins(param) >= 0) {
+            pad_copy(this->config.inputs, param, NETSENDER_IO_SIZE);
             ESP_LOGI(TAG, "inputs changed: %s", this->config.inputs);
             changed = true;
         } else {
-            ESP_LOGW(TAG, "invalid inputs: %s", param.c_str());
+            ESP_LOGW(TAG, "invalid inputs: %s", param);
         }
     }
-    if (netsender_extract_json(json_resp, "op", param) && param != this->config.outputs) {
-        if (check_pins(param.c_str()) >= 0) {
-            pad_copy(this->config.outputs, param.c_str(), NETSENDER_IO_SIZE);
+    if (netsender_extract_json(resp_buf, "op", param, sizeof(param)) && strcmp(param, this->config.outputs) != 0) {
+        if (check_pins(param) >= 0) {
+            pad_copy(this->config.outputs, param, NETSENDER_IO_SIZE);
             ESP_LOGI(TAG, "outputs changed: %s", this->config.outputs);
             changed = true;
         } else {
-            ESP_LOGW(TAG, "invalid outputs: %s", param.c_str());
+            ESP_LOGW(TAG, "invalid outputs: %s", param);
         }
     }
+
+    lock.unlock();
 
     if (changed) {
         this->configured = true;
@@ -503,7 +537,7 @@ esp_err_t Netsender::req_poll()
 
     for (auto i = 0; i < input_cnt; i++) {
         auto &pin = inputs[i];
-        if (pin.read != NULL) {
+        if (pin.read != nullptr) {
             // Read non-binary pins.
             pin.value = pin.read();
             if (!pin.value.has_value()) {
@@ -512,7 +546,7 @@ esp_err_t Netsender::req_poll()
             }
             ESP_LOGI(TAG, "read non-binary pin %s: %d", pin.name, pin.value.value());
             pin.data = NULL;
-        } else if (pin.read_binary != NULL) {
+        } else if (pin.read_binary != nullptr) {
             // Read binary pins.
             auto out = pin.read_binary();
             if (!out.has_value()) {
@@ -617,24 +651,27 @@ esp_err_t Netsender::req_poll()
         return ESP_FAIL;
     }
 
-    // TODO: Handle response.
+    // Parse the response while the HTTP buffer is locked, then act on it
+    // after releasing the lock, since these actions may issue new requests.
     ESP_LOGI(TAG, "poll response: %s", this->resp_buf);
-    std::string rc;
-    const auto resp = std::string(resp_buf);
+    char rc[16];
+    char vs[16];
+    int32_t response_code = 0;
+    int32_t new_varsum = 0;
+    const auto has_rc = netsender_extract_json(resp_buf, "rc", rc, sizeof(rc)) && parse_int(rc, response_code);
+    const auto has_vs = netsender_extract_json(resp_buf, "vs", vs, sizeof(vs)) && parse_int(vs, new_varsum);
     lock.unlock();
-    const auto has_rc = netsender_extract_json(resp, "rc", rc);
+
     if (has_rc) {
-        ESP_LOGD(TAG, "got response code: %s", rc.c_str());
-        if (handle_response_code(rc) != ESP_OK) {
+        ESP_LOGD(TAG, "got response code: %ld", static_cast<long>(response_code));
+        if (handle_response_code(response_code) != ESP_OK) {
             ESP_LOGE(TAG, "failed to handle response code");
         }
     }
 
-    std::string vs;
-    const auto has_vs = netsender_extract_json(resp, "vs", vs);
     if (has_vs) {
-        ESP_LOGD(TAG, "got varsum: %s", vs.c_str());
-        if (std::stoi(vs) != this->varsum) {
+        ESP_LOGD(TAG, "got varsum: %ld", static_cast<long>(new_varsum));
+        if (new_varsum != this->varsum) {
             ESP_LOGD(TAG, "varsum changed, getting vars");
             req_vars();
         }
@@ -711,32 +748,38 @@ esp_err_t Netsender::req_vars()
     }
 
     ESP_LOGI(TAG, "vars response: %s", this->resp_buf);
-    std::string vs;
-    const auto resp = std::string(resp_buf);
 
-    // Release the lock on the HTTP client handle.
+    // Parse the varsum while the response buffer is locked. The callback is
+    // also called while locked so that it can read the response buffer safely.
+    char vs[16];
+    int32_t new_varsum = 0;
+    const auto has_vs = netsender_extract_json(resp_buf, "vs", vs, sizeof(vs)) && parse_int(vs, new_varsum);
+
+    if (this->parse_variable_callback == nullptr) {
+        lock.unlock();
+        ESP_LOGE(TAG, "no variable parser registered");
+        return ESP_FAIL;
+    }
+
+    err = this->parse_variable_callback(this->resp_buf);
     lock.unlock();
 
-    err = this->parse_variable_callback(resp);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "unable to parse variables in callback");
         return ESP_FAIL;
     }
 
-    const auto has_vs = netsender_extract_json(resp, "vs", vs);
     if (has_vs) {
-        ESP_LOGD(TAG, "got varsum: %s", vs.c_str());
+        ESP_LOGD(TAG, "got varsum: %ld", static_cast<long>(new_varsum));
         // Update varsum with new varsum.
-        this->varsum = std::stoi(vs);
+        this->varsum = new_varsum;
     }
 
     return ESP_OK;
 }
 
-esp_err_t Netsender::handle_response_code(std::string code)
+esp_err_t Netsender::handle_response_code(int32_t rc)
 {
-    const auto rc = std::stoi(code);
-
     esp_err_t err;
     switch (rc) {
     case NETSENDER_RC_OK:
@@ -764,7 +807,7 @@ esp_err_t Netsender::handle_response_code(std::string code)
         // TODO: implement test.
         break;
     default:
-        ESP_LOGE(TAG, "got unexpected response code:");
+        ESP_LOGE(TAG, "got unexpected response code: %ld", static_cast<long>(rc));
         return ESP_FAIL;
     }
 
@@ -773,54 +816,146 @@ esp_err_t Netsender::handle_response_code(std::string code)
 
 int64_t Netsender::uptime() const { return esp_timer_get_time() / 1000000; }
 
-bool netsender_extract_json(const std::string &json, const char *name, std::string &value)
+namespace {
+
+const char *skip_space(const char *p)
 {
-    size_t start = json.find(std::string("\"") + name + "\"");
-    if (start == std::string::npos) {
-        return false;
+    while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') {
+        p++;
     }
+    return p;
+}
 
-    start += strlen(name) + 3; // Skip quotes and colon, then skip any whitespace.
-    while (start < json.length() && json[start] == ' ') {
-        start++;
-    }
-
-    if (start >= json.length()) {
-        return false;
-    }
-
-    size_t finish;
-    switch (json[start]) {
-    case '-':
-    case '0':
-    case '1':
-    case '2':
-    case '3':
-    case '4':
-    case '5':
-    case '6':
-    case '7':
-    case '8':
-    case '9':
-        finish = json.find(',', start);
-        if (finish == std::string::npos) {
-            finish = json.find('}', start);
+// skip_json_string returns the position just after the closing quote of the
+// string starting at p, or nullptr if the string is not terminated.
+const char *skip_json_string(const char *p)
+{
+    p++; // Skip the opening quote.
+    while (*p != '\0') {
+        if (*p == '\\' && p[1] != '\0') {
+            p += 2;
+            continue;
         }
-        break;
-    case '"':
-        start++; // Move past the opening quote
-        finish = json.find('"', start);
-        break;
-    default:
+        if (*p == '"') {
+            return p + 1;
+        }
+        p++;
+    }
+    return nullptr;
+}
+
+// copy_json_string decodes a quoted JSON string into out. Unsupported escapes
+// are preserved verbatim. Returns false if the string is malformed or does not
+// fit.
+bool copy_json_string(const char *p, char *out, size_t out_len)
+{
+    p++; // Skip the opening quote.
+    size_t n = 0;
+    while (*p != '\0') {
+        if (*p == '"') {
+            out[n] = '\0';
+            return true;
+        }
+
+        char c = *p;
+        if (c == '\\') {
+            p++;
+            c = *p;
+            switch (c) {
+            case '"':
+            case '\\':
+            case '/':
+                break;
+            case 'b':
+                c = '\b';
+                break;
+            case 'f':
+                c = '\f';
+                break;
+            case 'n':
+                c = '\n';
+                break;
+            case 'r':
+                c = '\r';
+                break;
+            case 't':
+                c = '\t';
+                break;
+            case '\0':
+                return false;
+            default:
+                // Preserve escapes we do not decode, such as \uXXXX.
+                if (n + 2 >= out_len) {
+                    return false;
+                }
+                out[n++] = '\\';
+                break;
+            }
+        }
+
+        if (n + 1 >= out_len) {
+            return false;
+        }
+        out[n++] = c;
+        p++;
+    }
+
+    return false;
+}
+
+// copy_json_number copies an unquoted JSON scalar into out.
+bool copy_json_number(const char *p, char *out, size_t out_len)
+{
+    p = skip_space(p);
+    size_t n = 0;
+    while (*p != '\0' && *p != ',' && *p != '}' && *p != ']' && *p != ' ' && *p != '\t' && *p != '\n' && *p != '\r') {
+        if (n + 1 >= out_len) {
+            return false;
+        }
+        out[n++] = *p++;
+    }
+
+    out[n] = '\0';
+    return n > 0;
+}
+
+} // namespace
+
+bool netsender_extract_json(const char *json, const char *name, char *out, size_t out_len)
+{
+    if (json == nullptr || name == nullptr || out == nullptr || out_len == 0) {
         return false;
     }
 
-    if (finish == std::string::npos) {
-        finish = json.length();
+    const auto name_len = strlen(name);
+    const char *p = json;
+    while ((p = strchr(p, '"')) != nullptr) {
+        const char *key_begin = p + 1;
+        const char *key_end = skip_json_string(p);
+        if (key_end == nullptr) {
+            return false;
+        }
+
+        const char *after_key = skip_space(key_end);
+        if (*after_key != ':') {
+            // This was a string value, not a key. Continue searching.
+            p = key_end;
+            continue;
+        }
+
+        const auto key_len = static_cast<size_t>(key_end - key_begin - 1);
+        if (key_len == name_len && memcmp(key_begin, name, key_len) == 0) {
+            const char *value = skip_space(after_key + 1);
+            if (*value == '"') {
+                return copy_json_string(value, out, out_len);
+            }
+            return copy_json_number(value, out, out_len);
+        }
+
+        p = key_end;
     }
 
-    value = json.substr(start, finish - start);
-    return true;
+    return false;
 }
 
 void pad_copy(char *dst, const char *src, size_t size)

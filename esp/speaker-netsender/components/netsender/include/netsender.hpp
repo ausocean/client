@@ -30,12 +30,10 @@
 #pragma once
 
 #include <cstdint>
-#include <functional>
 #include <mutex>
 #include <optional>
 #include <stddef.h>
 #include <stdint.h>
-#include <string>
 #include <vector>
 
 #include "esp_err.h"
@@ -116,19 +114,27 @@ struct netsender_configuration_t {
     char reserved[CONFIG_NETSENDER_RESERVED_SIZE];
 };
 
+// Callback types used by the NetSender client. These are intentionally plain
+// function pointers, as the callbacks are non-capturing.
+using pin_read_fn = std::optional<int64_t> (*)();
+using pin_read_binary_fn = std::optional<std::vector<uint8_t>> (*)();
+using variable_parser_fn = esp_err_t (*)(const char *);
+
 // Pin represents a pin name and value and optional POST data.
 struct netsender_pin_t {
     char name[NETSENDER_PIN_SIZE];
-    std::function<std::optional<int64_t>()> read;
-    std::function<std::optional<std::vector<uint8_t>>()> read_binary;
+    pin_read_fn read = nullptr;
+    pin_read_binary_fn read_binary = nullptr;
     std::optional<int64_t> value;
     std::vector<uint8_t> data_storage;
-    uint8_t *data;
+    uint8_t *data = nullptr;
 };
 
-// extract_json gets a string or integer value from JSON.
+// extract_json gets a string or integer value from JSON, writing it to the
+// supplied fixed-size buffer. Returns false if the field is missing, malformed,
+// or does not fit in the output buffer.
 // NB: This is NOT a general-purpose JSON parser.
-bool netsender_extract_json(const std::string &json, const char *name, std::string &value);
+bool netsender_extract_json(const char *json, const char *name, char *out, size_t out_len);
 
 class Netsender {
   public:
@@ -147,19 +153,19 @@ class Netsender {
     /**
      * @brief append a read function and associated pin.
      */
-    esp_err_t register_input(char *pin_name, std::function<std::optional<int64_t>()> read_func);
+    esp_err_t register_input(char *pin_name, pin_read_fn read_func);
 
     /**
      * @brief append a binary read function to an associated pin.
      */
-    esp_err_t register_binary_input(char *pin_name, std::function<std::optional<std::vector<uint8_t>>()> read_func);
+    esp_err_t register_binary_input(char *pin_name, pin_read_binary_fn read_func);
 
     /**
      * @brief register a callback to handle variable parsing.
      *
      * @param parser_func callback function to be called with the var request response.
      */
-    esp_err_t register_variable_parser(std::function<esp_err_t(std::string)> parser_func);
+    esp_err_t register_variable_parser(variable_parser_fn parser_func);
 
     /**
      * @brief makes a request to get variables.
@@ -262,7 +268,7 @@ class Netsender {
     /**
      * @brief handles response codes from server request.
      */
-    esp_err_t handle_response_code(std::string rc);
+    esp_err_t handle_response_code(int32_t rc);
 
     /**
      * Read the config from non-volatile storage (NVS).
@@ -294,5 +300,5 @@ class Netsender {
     /**
      * @brief callback used to handle variable parsing.
      */
-    std::function<esp_err_t(std::string)> parse_variable_callback;
+    variable_parser_fn parse_variable_callback = nullptr;
 };

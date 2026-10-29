@@ -1,9 +1,11 @@
 #pragma once
+#include <algorithm>
 #include <array>
+#include <charconv>
 #include <cstdio>
 #include <cstring>
 #include <optional>
-#include <string>
+#include <string_view>
 
 #include "esp_err.h"
 #include "esp_log.h"
@@ -42,21 +44,35 @@ struct device_var_state_t {
     char FilePath[MAX_STR_VAR_LEN];
 };
 
-inline void update_state_member(device_var_state_t &state, const std::string &var_id, const std::string &val)
+inline bool parse_int_var(std::string_view val, int32_t &out)
 {
+    const auto *begin = val.data();
+    const auto *end = begin + val.size();
+    auto result = std::from_chars(begin, end, out);
+    return result.ec == std::errc{} && result.ptr == end;
+}
+
+inline void update_state_member(device_var_state_t &state, std::string_view var_id, std::string_view val)
+{
+    int32_t number = 0;
     if (var_id == var::VAR_ID_VS) {
-        state.vs = static_cast<int32_t>(std::stoi(val));
+        if (parse_int_var(val, number)) {
+            state.vs = number;
+        }
     } else if (var_id == var::VAR_ID_VOLUME) {
-        state.Volume = static_cast<char>(std::stoi(val));
+        if (parse_int_var(val, number)) {
+            state.Volume = static_cast<char>(number);
+        }
     } else if (var_id == var::VAR_ID_FILEPATH) {
-        strncpy(state.FilePath, val.c_str(), sizeof(state.FilePath) - 1);
-        state.FilePath[sizeof(state.FilePath) - 1] = '\0';
+        const auto len = std::min(val.size(), sizeof(state.FilePath) - 1);
+        memcpy(state.FilePath, val.data(), len);
+        state.FilePath[len] = '\0';
     }
 }
 
-inline esp_err_t write_vars_to_file(const device_var_state_t &state, const std::string &file_path)
+inline esp_err_t write_vars_to_file(const device_var_state_t &state, const char *file_path)
 {
-    FILE *fd = fopen(file_path.c_str(), "w");
+    FILE *fd = fopen(file_path, "w");
     if (fd == NULL) {
         return ESP_FAIL;
     }
@@ -78,12 +94,12 @@ inline esp_err_t write_vars_to_file(const device_var_state_t &state, const std::
     return ESP_OK;
 }
 
-inline std::optional<device_var_state_t> read_vars_from_file(const std::string &file_path)
+inline std::optional<device_var_state_t> read_vars_from_file(const char *file_path)
 {
     device_var_state_t vars = {};
 
     ESP_LOGI("NETSENDER_VARS", "opening file");
-    FILE *fd = fopen(file_path.c_str(), "r");
+    FILE *fd = fopen(file_path, "r");
     if (fd == NULL) {
         return std::nullopt;
     }
