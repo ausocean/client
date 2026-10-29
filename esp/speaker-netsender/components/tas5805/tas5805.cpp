@@ -77,6 +77,8 @@ TAS5805::TAS5805(i2c_master_bus_handle_t i2c_bus_handle, i2s_chan_handle_t i2s_t
         .dev_addr_length = I2C_ADDR_BIT_LEN_7,
         .device_address = static_cast<uint16_t>(CONFIG_AMP_I2C_ADDRESS),
         .scl_speed_hz = CONFIG_AMP_I2C_CLOCK_SPEED,
+        .scl_wait_us = 0, // Use the driver default timeout.
+        .flags = {},
     };
 
     // Add the device to the bus.
