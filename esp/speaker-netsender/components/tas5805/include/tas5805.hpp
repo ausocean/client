@@ -26,6 +26,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <type_traits>
 
@@ -52,7 +53,10 @@ class TAS5805 {
      * @param bus_handle i2c bus handler to connect the amplifier to.
      * @param tx_handle i2s transmit pipe handler to play audio.
      */
-    TAS5805(i2c_master_bus_handle_t handle, i2s_chan_handle_t *tx_handle);
+    TAS5805(i2c_master_bus_handle_t handle, i2s_chan_handle_t tx_handle);
+
+    TAS5805(const TAS5805 &) = delete;
+    TAS5805 &operator=(const TAS5805 &) = delete;
 
     /**
      * @brief returns the status of the device (communicating or not).
@@ -83,6 +87,16 @@ class TAS5805 {
 
   private:
     /**
+     * @brief Allocates the playback buffers on first use.
+     */
+    esp_err_t prepare_buffers();
+
+    /**
+     * @brief Releases the playback buffers.
+     */
+    void free_buffers();
+
+    /**
      * @brief Writes the data to the given register.
      *
      * @param reg number of the register to be written.
@@ -104,6 +118,25 @@ class TAS5805 {
     i2c_master_bus_handle_t bus_handle;
     i2c_master_dev_handle_t dev_handle;
 
-    /** I2S handles */
-    i2s_chan_handle_t *tx_handle;
+    /** I2S handle */
+    i2s_chan_handle_t tx_handle = nullptr;
+
+    /** Number of samples read from the file for each I2S write. */
+    static constexpr size_t SAMPLES_PER_READ = 4096;
+
+    /** Maximum number of channels supported in an audio file. */
+    static constexpr size_t MAX_CHANNELS = 2;
+
+    /** Size of the file stream buffer. */
+    static constexpr size_t FS_BUF_SIZE = 32768;
+
+    /**
+     * @brief Playback buffers, allocated once on first playback and reused.
+     *
+     * fs_buf is used by stdio for file access, file_buf holds samples read
+     * from the file, and i2s_buf is the DMA-capable buffer written to I2S.
+     */
+    char *fs_buf = nullptr;
+    int16_t *file_buf = nullptr;
+    int16_t *i2s_buf = nullptr;
 };

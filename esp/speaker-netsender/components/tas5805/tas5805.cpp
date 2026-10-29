@@ -68,7 +68,7 @@ typedef struct {
     uint32_t subchunk2_size;
 } wav_header_t;
 
-TAS5805::TAS5805(i2c_master_bus_handle_t i2c_bus_handle, i2s_chan_handle_t *i2s_tx_handle)
+TAS5805::TAS5805(i2c_master_bus_handle_t i2c_bus_handle, i2s_chan_handle_t i2s_tx_handle)
     : bus_handle(i2c_bus_handle), tx_handle(i2s_tx_handle)
 {
     // Initialise I2C device.
@@ -123,11 +123,58 @@ bool TAS5805::is_connected()
     return true;
 }
 
+esp_err_t TAS5805::prepare_buffers()
+{
+    if (fs_buf != nullptr && file_buf != nullptr && i2s_buf != nullptr) {
+        return ESP_OK;
+    }
+
+    // The stdio buffer is not used directly by a DMA engine, so it can live
+    // in normal internal RAM.
+    if (fs_buf == nullptr) {
+        fs_buf = static_cast<char *>(heap_caps_malloc(FS_BUF_SIZE, MALLOC_CAP_8BIT));
+    }
+
+    if (file_buf == nullptr) {
+        file_buf = static_cast<int16_t *>(
+            heap_caps_malloc(SAMPLES_PER_READ * MAX_CHANNELS * sizeof(int16_t), MALLOC_CAP_8BIT));
+    }
+
+    // The I2S descriptor and buffers must be DMA capable.
+    if (i2s_buf == nullptr) {
+        i2s_buf = static_cast<int16_t *>(
+            heap_caps_malloc(SAMPLES_PER_READ * MAX_CHANNELS * sizeof(int16_t), MALLOC_CAP_DMA));
+    }
+
+    if (fs_buf == nullptr || file_buf == nullptr || i2s_buf == nullptr) {
+        ESP_LOGE(TAG, "unable to allocate playback buffers");
+        free_buffers();
+        return ESP_FAIL;
+    }
+
+    return ESP_OK;
+}
+
+void TAS5805::free_buffers()
+{
+    free(fs_buf);
+    free(file_buf);
+    free(i2s_buf);
+    fs_buf = nullptr;
+    file_buf = nullptr;
+    i2s_buf = nullptr;
+}
+
 esp_err_t TAS5805::play(const char *path, volatile bool *kill_request)
 {
     // Ensure a valid I2S handle exists to send audio.
-    if (tx_handle == NULL || *tx_handle == NULL) {
+    if (tx_handle == NULL) {
         ESP_LOGE(TAG, "tx_handle must be not-NULL to play audio");
+        return ESP_FAIL;
+    }
+
+    // Allocate the buffers on the first playback pass only.
+    if (prepare_buffers() != ESP_OK) {
         return ESP_FAIL;
     }
 
@@ -141,53 +188,32 @@ esp_err_t TAS5805::play(const char *path, volatile bool *kill_request)
         ESP_LOGE(TAG, "Could not open file: %s", path);
         return ESP_FAIL;
     }
-    // Create a 32KB staging buffer in internal DMA RAM, this improves SD
-    // read/write performance.
-    size_t fs_buf_size = 32768;
-    char *fs_buf = (char *)heap_caps_malloc(fs_buf_size, MALLOC_CAP_DMA);
 
-    // Set the audio file to use full buffering (_IOFBF), with the buffer
-    // that was just created.
-    if (fs_buf) {
-        setvbuf(f, fs_buf, _IOFBF, fs_buf_size);
-    }
+    // Set the audio file to use full buffering (_IOFBF), with the reusable
+    // staging buffer.
+    setvbuf(f, fs_buf, _IOFBF, FS_BUF_SIZE);
 
     // Read WAV header.
     wav_header_t header;
     if (fread(&header, sizeof(wav_header_t), 1, f) != 1) {
         fclose(f);
-        free(fs_buf);
         return ESP_FAIL;
     }
 
-    // Use 4096 samples as our working chunk.
-    const size_t samples_per_read = 4096;
-    size_t frame_size = sizeof(int16_t) * header.num_channels;
-
-    // Buffer for reading from file.
-    int16_t *file_buf = (int16_t *)heap_caps_malloc(samples_per_read * frame_size, MALLOC_CAP_8BIT);
-    // Buffer for writing to I2S.
-    // NOTE: The I2S buffer will always be stereo, regardless of the file type.
-    int16_t *i2s_buf = (int16_t *)heap_caps_malloc(samples_per_read * 2 * sizeof(int16_t), MALLOC_CAP_DMA);
-
-    // Verify that buffers got allocated successfully.
-    if (!file_buf || !i2s_buf) {
-        if (file_buf) {
-            free(file_buf);
-        }
-        if (i2s_buf) {
-            free(i2s_buf);
-        }
-
+    // Only 16-bit mono or stereo PCM is supported by the I2S configuration.
+    if (header.num_channels < 1 || header.num_channels > MAX_CHANNELS || header.bits_per_sample != 16) {
+        ESP_LOGE(TAG, "unsupported WAV format: %u channels, %u bits per sample", header.num_channels,
+                 header.bits_per_sample);
         fclose(f);
-        free(fs_buf);
         return ESP_FAIL;
     }
+
+    size_t frame_size = sizeof(int16_t) * header.num_channels;
 
     size_t samples_read;
     size_t bytes_written;
 
-    while ((samples_read = fread(file_buf, frame_size, samples_per_read, f)) > 0) {
+    while ((samples_read = fread(file_buf, frame_size, SAMPLES_PER_READ, f)) > 0) {
         if (header.num_channels == 1) {
             // We need to fill every second sample (right-channel), with a
             // copy of the left channel audio, since the original file is mono,
@@ -199,11 +225,11 @@ esp_err_t TAS5805::play(const char *path, volatile bool *kill_request)
             }
         } else {
             // Just copy the file buffer directly to the I2S buffer.
-            memcpy(i2s_buf, file_buf, samples_read * 2 * sizeof(int16_t));
+            memcpy(i2s_buf, file_buf, samples_read * frame_size);
         }
 
         // Write audio to the amplifier.
-        i2s_channel_write(*tx_handle, i2s_buf, samples_read * 2 * sizeof(int16_t), &bytes_written, portMAX_DELAY);
+        i2s_channel_write(tx_handle, i2s_buf, samples_read * 2 * sizeof(int16_t), &bytes_written, portMAX_DELAY);
 
         if (kill_request && *kill_request) {
             ESP_LOGI("AUDIO", "Kill request received, stopping playback.");
@@ -213,16 +239,9 @@ esp_err_t TAS5805::play(const char *path, volatile bool *kill_request)
 
     // Push final silence to clear the amp's pipeline.
     memset(i2s_buf, 0, 512 * 4);
-    i2s_channel_write(*tx_handle, i2s_buf, 512 * 4, &bytes_written, pdMS_TO_TICKS(100));
-
-    free(file_buf);
-    free(i2s_buf);
+    i2s_channel_write(tx_handle, i2s_buf, 512 * 4, &bytes_written, pdMS_TO_TICKS(100));
 
     fclose(f);
-    if (fs_buf) {
-        free(fs_buf);
-    }
-
     return ESP_OK;
 }
 
@@ -278,4 +297,14 @@ void TAS5805::write_reg(const int reg, const Cmd... cmds)
     write_reg(reg, cmd);
 }
 
-TAS5805::~TAS5805() { delete tx_handle; }
+TAS5805::~TAS5805()
+{
+    free_buffers();
+
+    if (tx_handle != nullptr) {
+        i2s_channel_disable(tx_handle);
+        i2s_del_channel(tx_handle);
+        tx_handle = nullptr;
+    }
+    i2c_master_bus_rm_device(dev_handle);
+}

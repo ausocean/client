@@ -178,11 +178,11 @@ TAS5805 init_amp()
     ESP_LOGI(TAG, "I2C Master bus created");
 
     // Configure I2S Channel.
-    i2s_chan_handle_t *tx_handle = new i2s_chan_handle_t();
+    i2s_chan_handle_t tx_handle = nullptr;
     i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
     chan_cfg.dma_desc_num = 16;
     chan_cfg.dma_frame_num = 512;
-    ESP_ERROR_CHECK(i2s_new_channel(&chan_cfg, tx_handle, NULL));
+    ESP_ERROR_CHECK(i2s_new_channel(&chan_cfg, &tx_handle, NULL));
 
     i2s_std_config_t std_cfg = {
         .clk_cfg =
@@ -210,12 +210,12 @@ TAS5805 init_amp()
     };
 
     // Initialise channel.
-    ESP_ERROR_CHECK(i2s_channel_init_std_mode(*tx_handle, &std_cfg));
+    ESP_ERROR_CHECK(i2s_channel_init_std_mode(tx_handle, &std_cfg));
 
     // Enable the channel.
     // NOTE: This MUST be done before initialising amp, as the amp requires a
     // stable clock before configuration.
-    ESP_ERROR_CHECK(i2s_channel_enable(*tx_handle));
+    ESP_ERROR_CHECK(i2s_channel_enable(tx_handle));
     ESP_LOGI(TAG, "I2S initialized and clocks started");
 
     // Create a new amplifier.
