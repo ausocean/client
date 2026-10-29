@@ -133,10 +133,14 @@ bool cached_file_is_valid(const char *path)
     return read == sizeof(header) && memcmp(header, "RIFF", 4) == 0 && memcmp(header + 8, "WAVE", 4) == 0;
 }
 
-esp_err_t download_file_to_sdcard()
+esp_err_t download_file_to_sdcard(const char *url)
 {
+    if (url == nullptr || url[0] == '\0') {
+        return ESP_FAIL;
+    }
+
     char filename[HASH_FILENAME_LEN];
-    url_to_filename(vars.FilePath, filename);
+    url_to_filename(url, filename);
 
     char file_path[128];
     snprintf(file_path, sizeof(file_path), "%s/%s", MOUNT_POINT, filename);
@@ -174,7 +178,7 @@ esp_err_t download_file_to_sdcard()
 
     // Configure the request.
     esp_http_client_config_t config = {};
-    config.url = vars.FilePath;
+    config.url = url;
     config.method = HTTP_METHOD_GET;
     config.timeout_ms = 5000;
     config.disable_auto_redirect = false;
@@ -261,7 +265,9 @@ TAS5805 init_amp()
     // Configure I2S Channel.
     i2s_chan_handle_t tx_handle = nullptr;
     i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
-    chan_cfg.dma_desc_num = 16;
+    // 32 * 512 frames gives about 341 ms of DMA buffering at 48 kHz. This
+    // absorbs SD/network-induced scheduling delays without an underrun.
+    chan_cfg.dma_desc_num = 32;
     chan_cfg.dma_frame_num = 512;
     ESP_ERROR_CHECK(i2s_new_channel(&chan_cfg, &tx_handle, NULL));
 
@@ -313,24 +319,42 @@ void audio_task(void *pvParameters)
         return;
     }
 
+    ESP_LOGI(AUDIO_TAG, "audio task on core %d, priority %u", xPortGetCoreID(), uxTaskPriorityGet(NULL));
+
     // Start by pausing the audio to ensure the I2S buffer is empty
     amp->pause();
 
     // This will always be the same length.
     char filename[HASH_FILENAME_LEN];
     char file_path[netsender::MAX_STR_VAR_LEN];
+    char audio_url[netsender::MAX_STR_VAR_LEN];
 
     while (true) {
-        url_to_filename(vars.FilePath, filename);
-        snprintf(file_path, sizeof(file_path), "%s/%s", MOUNT_POINT, filename);
-        while (reload_requested) {
-            vTaskDelay(pdMS_TO_TICKS(1000));
-            ESP_LOGI(AUDIO_TAG, "waiting for reload to complete");
+        // Persist changed variables only while no audio is being played. This
+        // keeps volume-change SD writes out of the playback path.
+        persist_vars_if_dirty();
+
+        // Acknowledge a pending file switch. The main task publishes the new
+        // URL before setting the flag, so it is safe to clear it here.
+        reload_requested = false;
+
+        {
+            std::lock_guard<std::mutex> lock(vars_mutex);
+            strlcpy(audio_url, current_audio_url, sizeof(audio_url));
         }
-        ESP_LOGI(AUDIO_TAG, "Starting playback...");
+
+        if (audio_url[0] == '\0') {
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            continue;
+        }
+
+        url_to_filename(audio_url, filename);
+        snprintf(file_path, sizeof(file_path), "%s/%s", MOUNT_POINT, filename);
+        ESP_LOGD(AUDIO_TAG, "Starting playback...");
 
         // This will block until the file ends, or reload requested is set to true.
         auto err = amp->play(file_path, &reload_requested);
+
         if (err != ESP_OK) {
             ESP_LOGE(AUDIO_TAG, "Playback error, retrying in 1s...");
             vTaskDelay(pdMS_TO_TICKS(1000));

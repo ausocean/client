@@ -69,7 +69,9 @@ void init_sd()
     // Options for mounting the filesystem.
     esp_vfs_fat_sdmmc_mount_config_t mount_config = {};
     mount_config.format_if_mount_failed = false;
-    mount_config.max_files = 5;
+    // Audio, two log files, vars, and a temporary download can be open at the
+    // same time, so leave some headroom.
+    mount_config.max_files = 8;
     mount_config.allocation_unit_size = 32 * 1024;
 
     // Mount the filesystem.

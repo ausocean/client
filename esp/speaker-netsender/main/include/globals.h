@@ -26,13 +26,32 @@
 
 #pragma once
 
+#include <atomic>
+#include <mutex>
+
 #include "include/netsender_vars.hpp"
 
 // Mount point for the SD card filesystem.
 inline const constexpr auto MOUNT_POINT = "/sdcard";
 
-// Atomic flag for stopping audio playback.
-// TODO: Use a better threadsafe option.
-inline volatile bool reload_requested = false;
+// Request the audio task to stop the current file and restart with the URL in
+// current_audio_url. The main task sets this after a successful download and
+// only the audio task clears it. This avoids a switch being lost if the audio
+// task is blocked on SD I/O for a while.
+inline std::atomic<bool> reload_requested{false};
 
 extern netsender::device_var_state_t vars;
+extern std::mutex vars_mutex;
+extern char current_audio_url[netsender::MAX_STR_VAR_LEN];
+
+// Set when the variables have changed and need to be persisted to SD. The
+// audio task performs the write between tracks so it never competes with
+// playback, and the HTTP poll path never touches the SD card.
+inline std::atomic<bool> vars_dirty{false};
+
+/**
+ * @brief Persist the variables to SD if they have changed.
+ *
+ * Must only be called when audio is not being fed to I2S.
+ */
+esp_err_t persist_vars_if_dirty();

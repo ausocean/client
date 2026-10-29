@@ -44,9 +44,11 @@ constexpr const auto HASH_FILENAME_LEN = 69;
 void url_to_filename(const char *url, char *out_filename);
 
 /**
- * @brief downloads the current var.FileName to the SD card.
+ * @brief downloads the given audio URL to the SD card.
+ *
+ * @param[in] url audio file URL.
  */
-esp_err_t download_file_to_sdcard();
+esp_err_t download_file_to_sdcard(const char *url);
 
 /**
  * @brief Initialise I2S system, and amplifier.
