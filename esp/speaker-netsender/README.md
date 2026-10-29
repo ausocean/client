@@ -32,6 +32,30 @@ clang-tidy --fix <filepath>
 
 ## Speaker behaviour
 
+### Playback isolation
+
+Audio playback is isolated from network and logging work:
+
+- The audio task runs on core 1 at priority 10.
+- The NetSender/HTTP task, logging task, OTA listener, lwIP task, Ethernet
+  receive task, and FreeRTOS timer service all run on core 0.
+- The I2S DMA ring holds 32 x 512 frames (about 341 ms at 48 kHz), which
+  absorbs short SD or scheduler stalls.
+- New audio is downloaded while the current file keeps playing. Playback only
+  switches once the download has completed and the audio task has left
+  `play()`, so a slow or failed download does not stop the old file.
+- Logs waiting to be uploaded are buffered in RAM, and variable persistence is
+  deferred to the main loop. The HTTP poll path therefore performs no SD I/O.
+- Transient SD read errors during playback are retried instead of being treated
+  as end-of-file, which would restart the track from the beginning.
+- The shared device variables are protected by a mutex, and the reload flag is
+  atomic, since the main/network tasks and the audio task run on different
+  cores.
+
+The SD card bus is still shared by playback, file logging, and audio downloads.
+The larger DMA ring, task separation, and removal of poll-time SD access keep
+normal polling from causing audible gaps.
+
 ### Volume
 
 The `Volume` variable is interpreted as a value from 0 to 100. It is mapped onto

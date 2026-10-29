@@ -168,7 +168,7 @@ void TAS5805::free_buffers()
     i2s_buf = nullptr;
 }
 
-esp_err_t TAS5805::play(const char *path, volatile bool *kill_request)
+esp_err_t TAS5805::play(const char *path, const std::atomic<bool> *kill_request)
 {
     // Ensure a valid I2S handle exists to send audio.
     if (tx_handle == NULL) {
@@ -196,11 +196,22 @@ esp_err_t TAS5805::play(const char *path, volatile bool *kill_request)
     // staging buffer.
     setvbuf(f, fs_buf, _IOFBF, FS_BUF_SIZE);
 
-    // Read WAV header.
+    // Read WAV header. Retry short reads caused by transient SD contention
+    // instead of treating them as end-of-file and restarting the file.
+    constexpr auto READ_RETRIES = 4;
+    constexpr auto READ_RETRY_DELAY_MS = 20;
     wav_header_t header;
-    if (fread(&header, sizeof(wav_header_t), 1, f) != 1) {
-        fclose(f);
-        return ESP_FAIL;
+    size_t header_retries = 0;
+    while (fread(&header, sizeof(wav_header_t), 1, f) != 1) {
+        if (feof(f) || header_retries++ >= READ_RETRIES) {
+            ESP_LOGE(TAG, "failed to read WAV header: %s", path);
+            fclose(f);
+            return ESP_FAIL;
+        }
+
+        clearerr(f);
+        fseek(f, 0, SEEK_SET);
+        vTaskDelay(pdMS_TO_TICKS(READ_RETRY_DELAY_MS));
     }
 
     // Only 16-bit mono or stereo PCM is supported by the I2S configuration.
@@ -215,8 +226,34 @@ esp_err_t TAS5805::play(const char *path, volatile bool *kill_request)
 
     size_t samples_read;
     size_t bytes_written;
+    size_t read_errors = 0;
 
-    while ((samples_read = fread(file_buf, frame_size, SAMPLES_PER_READ, f)) > 0) {
+    while (true) {
+        samples_read = fread(file_buf, frame_size, SAMPLES_PER_READ, f);
+        if (samples_read == 0) {
+            if (feof(f)) {
+                break;
+            }
+
+            if (ferror(f)) {
+                if (read_errors++ >= READ_RETRIES) {
+                    ESP_LOGE(TAG, "too many read errors, stopping playback: %s", path);
+                    fclose(f);
+                    return ESP_FAIL;
+                }
+
+                // Keep the I2S DMA running and retry; transient SD contention
+                // should not restart the file from the beginning.
+                clearerr(f);
+                vTaskDelay(pdMS_TO_TICKS(READ_RETRY_DELAY_MS));
+                continue;
+            }
+
+            break;
+        }
+
+        read_errors = 0;
+
         if (header.num_channels == 1) {
             // We need to fill every second sample (right-channel), with a
             // copy of the left channel audio, since the original file is mono,
@@ -234,8 +271,8 @@ esp_err_t TAS5805::play(const char *path, volatile bool *kill_request)
         // Write audio to the amplifier.
         i2s_channel_write(tx_handle, i2s_buf, samples_read * 2 * sizeof(int16_t), &bytes_written, portMAX_DELAY);
 
-        if (kill_request && *kill_request) {
-            ESP_LOGI("AUDIO", "Kill request received, stopping playback.");
+        if (kill_request && kill_request->load()) {
+            ESP_LOGD("AUDIO", "Kill request received, stopping playback.");
             break;
         }
     }

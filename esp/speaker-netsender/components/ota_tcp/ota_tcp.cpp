@@ -44,6 +44,10 @@ static volatile bool ota_initialised = false;
 
 constexpr auto OTA_TCP_PORT = 4141;
 
+// Keep OTA handling off the audio core and below the audio task priority.
+constexpr auto OTA_TASK_CORE = 0;
+constexpr auto OTA_TASK_PRIORITY = 2;
+
 // OTA TCP listener task.
 void ota_tcp_task(void *)
 {
@@ -131,7 +135,7 @@ void init_ota_tcp()
     ESP_LOGI(TAG, "OTA TCP version: %s", OTA_TCP_VERSION);
 
     // Run in freeRTOS task.
-    xTaskCreatePinnedToCore(ota_tcp_task, "ota", 8192, NULL, 5, NULL, 1);
+    xTaskCreatePinnedToCore(ota_tcp_task, "ota", 8192, NULL, OTA_TASK_PRIORITY, NULL, OTA_TASK_CORE);
 }
 
 void ota_tcp_validate_partition(bool valid_partition)

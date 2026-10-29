@@ -54,6 +54,7 @@
 #include "esp_timer.h"
 #include "esp_tls.h"
 #include "esp_tls_errors.h"
+#include "freertos/idf_additions.h"
 #include "freertos/projdefs.h"
 #include "freertos/task.h"
 
@@ -72,6 +73,10 @@ static constexpr const auto CONFIG_NVS_KEY = "config";
 static constexpr const auto RETRY_PERIOD = 5;
 
 static constexpr const char *TAG = "netsender";
+
+// HTTP and protocol work is kept off the audio core.
+static constexpr const auto NETSENDER_TASK_CORE = 0;
+static constexpr const auto NETSENDER_TASK_PRIORITY = 1;
 
 // Static definition of the netsender task stack.
 static StackType_t ns_stack[CONFIG_NETSENDER_TASK_STACK_DEPTH];
@@ -307,8 +312,8 @@ void Netsender::task_wrapper(void *params)
 void Netsender::start()
 {
     // Structure that will hold the TCB of the task being created
-    xTaskCreateStatic(this->task_wrapper, "NetSender", CONFIG_NETSENDER_TASK_STACK_DEPTH, this, 0, ns_stack,
-                      &xTaskBuffer);
+    xTaskCreateStaticPinnedToCore(this->task_wrapper, "NetSender", CONFIG_NETSENDER_TASK_STACK_DEPTH, this,
+                                  NETSENDER_TASK_PRIORITY, ns_stack, &xTaskBuffer, NETSENDER_TASK_CORE);
 }
 
 Netsender::~Netsender() {}
@@ -364,7 +369,7 @@ esp_err_t http_event_handler(esp_http_client_event_t *evt)
         output_len = 0;
         break;
     case HTTP_EVENT_DISCONNECTED:
-        ESP_LOGI(TAG, "HTTP_EVENT_DISCONNECTED");
+        ESP_LOGD(TAG, "HTTP_EVENT_DISCONNECTED");
         {
             int mbedtls_err = 0;
             esp_err_t err = esp_tls_get_and_clear_last_error((esp_tls_error_handle_t)evt->data, &mbedtls_err, NULL);
@@ -531,7 +536,7 @@ void Netsender::append_pin_to_url(char *url, netsender_pin_t &pin)
 
 esp_err_t Netsender::req_poll()
 {
-    ESP_LOGI(TAG, "--- POLLING ---");
+    ESP_LOGD(TAG, "--- POLLING ---");
 
     char url[MAX_URL_LEN + 1];
 
@@ -552,7 +557,7 @@ esp_err_t Netsender::req_poll()
                 ESP_LOGE(TAG, "failed to read pin %s", pin.name);
                 continue;
             }
-            ESP_LOGI(TAG, "read non-binary pin %s: %d", pin.name, pin.value.value());
+            ESP_LOGD(TAG, "read non-binary pin %s: %d", pin.name, pin.value.value());
             pin.data = NULL;
         } else if (pin.read_binary != nullptr) {
             // Read binary pins.
@@ -564,7 +569,7 @@ esp_err_t Netsender::req_poll()
             pin.data_storage = std::move(out.value());
             pin.data = pin.data_storage.data();
             pin.value = pin.data_storage.size();
-            ESP_LOGI(TAG, "read binary pin %s: %d", pin.name, pin.value.value());
+            ESP_LOGD(TAG, "read binary pin %s: %d", pin.name, pin.value.value());
         }
 
         append_pin_to_url(url, pin);
@@ -661,7 +666,7 @@ esp_err_t Netsender::req_poll()
 
     // Parse the response while the HTTP buffer is locked, then act on it
     // after releasing the lock, since these actions may issue new requests.
-    ESP_LOGI(TAG, "poll response: %s", this->resp_buf);
+    ESP_LOGD(TAG, "poll response: %s", this->resp_buf);
     char rc[16];
     char vs[16];
     int32_t response_code = 0;
@@ -708,7 +713,7 @@ esp_err_t Netsender::init_http_handle()
 
 esp_err_t Netsender::req_vars()
 {
-    ESP_LOGI(TAG, "--- REQUESTING VARS ---");
+    ESP_LOGD(TAG, "--- REQUESTING VARS ---");
 
     char url[MAX_URL_LEN + 1];
 
@@ -755,7 +760,7 @@ esp_err_t Netsender::req_vars()
         return ESP_FAIL;
     }
 
-    ESP_LOGI(TAG, "vars response: %s", this->resp_buf);
+    ESP_LOGD(TAG, "vars response: %s", this->resp_buf);
 
     // Parse the varsum while the response buffer is locked. The callback is
     // also called while locked so that it can read the response buffer safely.

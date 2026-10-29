@@ -26,6 +26,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <type_traits>
@@ -67,7 +68,7 @@ class TAS5805 {
      * @brief Reads PCM data from a file and writes it to the I2S DMA buffer.
      * @param f Pointer to the opened audio file
      */
-    esp_err_t play(const char *path, volatile bool *kill_request);
+    esp_err_t play(const char *path, const std::atomic<bool> *kill_request);
 
     /**
      * @brief Pauses playback of the amp.

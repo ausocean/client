@@ -93,6 +93,10 @@ void init_ethernet()
 {
     // Create MAC instance.
     eth_mac_config_t mac_config = ETH_MAC_DEFAULT_CONFIG();
+    // Keep the high-priority Ethernet receive task off the audio core. The
+    // driver pins it to the core where the MAC is created, which is the main
+    // task on core 0.
+    mac_config.flags |= ETH_MAC_FLAG_PIN_TO_CORE;
     eth_esp32_emac_config_t esp32_emac_config = ETH_ESP32_EMAC_DEFAULT_CONFIG();
     esp32_emac_config.smi_gpio.mdc_num = CONFIG_ETHERNET_MDC_GPIO;
     esp32_emac_config.smi_gpio.mdio_num = CONFIG_ETHERNET_MDIO_GPIO;
