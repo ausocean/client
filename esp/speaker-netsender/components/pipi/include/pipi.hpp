@@ -26,6 +26,7 @@
 #pragma once
 
 #include <cstdarg>
+#include <mutex>
 #ifdef RUNNING_UNIT_TESTS
 #include <gtest/gtest_prod.h>
 #endif
@@ -74,6 +75,16 @@ class Entry {
      * @param[in] file a file descriptor to write the formatted log to.
      */
     esp_err_t write(const int fd);
+
+    /**
+     * @brief format the entry as JSON into the given buffer.
+     *
+     * @param[out] out destination buffer.
+     * @param[in] out_len length of the destination buffer.
+     * @return number of bytes written excluding the null terminator, or -1 on
+     * error.
+     */
+    int format(char *out, size_t out_len) const;
 
   private:
 #ifdef RUNNING_UNIT_TESTS
@@ -136,6 +147,15 @@ class FileLogger {
     esp_err_t log(char *msg);
 
     /**
+     * @brief Writes an ESP pre-formatted log and optionally formats it as JSON.
+     *
+     * @param[in] msg log message.
+     * @param[out] formatted optional buffer for the JSON form of the log.
+     * @param[in] formatted_len length of the formatted buffer.
+     */
+    esp_err_t log(char *msg, char *formatted, size_t formatted_len);
+
+    /**
      * @brief maximum path length.
      */
     static constexpr auto MAX_PATH_LENGTH = 256;
@@ -196,6 +216,11 @@ class FileLogger {
      * @brief tracks if the creation has completed successfully.
      */
     bool ready;
+
+    /**
+     * @brief serialises access to the logger's file state.
+     */
+    std::mutex mutex;
 
     void close();
 };
