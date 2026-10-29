@@ -82,7 +82,7 @@ menu "Amplifier"
         config AMP_I2C_CLOCK_SPEED
         int "I2C Clock Speed (Hz)"
         range 1000 250000
-        default 0
+        default 1000
         help
             Clock speed used by the I2C bus to communicate with the amplifier.
 
