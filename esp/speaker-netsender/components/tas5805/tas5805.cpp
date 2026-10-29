@@ -68,7 +68,7 @@ typedef struct {
     uint32_t subchunk2_size;
 } wav_header_t;
 
-TAS5805::TAS5805(i2c_master_bus_handle_t i2c_bus_handle, i2s_chan_handle_t *i2s_tx_handle)
+TAS5805::TAS5805(i2c_master_bus_handle_t i2c_bus_handle, i2s_chan_handle_t i2s_tx_handle)
     : bus_handle(i2c_bus_handle), tx_handle(i2s_tx_handle)
 {
     // Initialise I2C device.
@@ -126,7 +126,7 @@ bool TAS5805::is_connected()
 esp_err_t TAS5805::play(const char *path, volatile bool *kill_request)
 {
     // Ensure a valid I2S handle exists to send audio.
-    if (tx_handle == NULL || *tx_handle == NULL) {
+    if (tx_handle == NULL) {
         ESP_LOGE(TAG, "tx_handle must be not-NULL to play audio");
         return ESP_FAIL;
     }
@@ -203,7 +203,7 @@ esp_err_t TAS5805::play(const char *path, volatile bool *kill_request)
         }
 
         // Write audio to the amplifier.
-        i2s_channel_write(*tx_handle, i2s_buf, samples_read * 2 * sizeof(int16_t), &bytes_written, portMAX_DELAY);
+        i2s_channel_write(tx_handle, i2s_buf, samples_read * 2 * sizeof(int16_t), &bytes_written, portMAX_DELAY);
 
         if (kill_request && *kill_request) {
             ESP_LOGI("AUDIO", "Kill request received, stopping playback.");
@@ -213,7 +213,7 @@ esp_err_t TAS5805::play(const char *path, volatile bool *kill_request)
 
     // Push final silence to clear the amp's pipeline.
     memset(i2s_buf, 0, 512 * 4);
-    i2s_channel_write(*tx_handle, i2s_buf, 512 * 4, &bytes_written, pdMS_TO_TICKS(100));
+    i2s_channel_write(tx_handle, i2s_buf, 512 * 4, &bytes_written, pdMS_TO_TICKS(100));
 
     free(file_buf);
     free(i2s_buf);
@@ -278,4 +278,12 @@ void TAS5805::write_reg(const int reg, const Cmd... cmds)
     write_reg(reg, cmd);
 }
 
-TAS5805::~TAS5805() { delete tx_handle; }
+TAS5805::~TAS5805()
+{
+    if (tx_handle != nullptr) {
+        i2s_channel_disable(tx_handle);
+        i2s_del_channel(tx_handle);
+        tx_handle = nullptr;
+    }
+    i2c_master_bus_rm_device(dev_handle);
+}

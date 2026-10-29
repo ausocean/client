@@ -52,7 +52,10 @@ class TAS5805 {
      * @param bus_handle i2c bus handler to connect the amplifier to.
      * @param tx_handle i2s transmit pipe handler to play audio.
      */
-    TAS5805(i2c_master_bus_handle_t handle, i2s_chan_handle_t *tx_handle);
+    TAS5805(i2c_master_bus_handle_t handle, i2s_chan_handle_t tx_handle);
+
+    TAS5805(const TAS5805 &) = delete;
+    TAS5805 &operator=(const TAS5805 &) = delete;
 
     /**
      * @brief returns the status of the device (communicating or not).
@@ -104,6 +107,6 @@ class TAS5805 {
     i2c_master_bus_handle_t bus_handle;
     i2c_master_dev_handle_t dev_handle;
 
-    /** I2S handles */
-    i2s_chan_handle_t *tx_handle;
+    /** I2S handle */
+    i2s_chan_handle_t tx_handle = nullptr;
 };
