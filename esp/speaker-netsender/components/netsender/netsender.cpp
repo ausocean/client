@@ -67,6 +67,10 @@ static constexpr const auto MAX_URL_LEN = 256;
 static constexpr const auto STORAGE_NAMESPACE = "netsender";
 static constexpr const auto CONFIG_NVS_KEY = "config";
 
+// Used when no monitoring period is configured, so an unconfigured device
+// does not poll continuously.
+static constexpr const auto RETRY_PERIOD = 5;
+
 static constexpr const char *TAG = "netsender";
 
 // Static definition of the netsender task stack.
@@ -132,6 +136,11 @@ Netsender::Netsender()
         this->configured = false;
     } else {
         this->configured = true;
+    }
+
+    // Avoid polling continuously if no monitoring period is stored.
+    if (this->config.monPeriod <= 0) {
+        this->config.monPeriod = RETRY_PERIOD;
     }
 
     // Initialise HTTP handler.
@@ -447,7 +456,7 @@ esp_err_t Netsender::req_config()
 
     if (netsender_extract_json(resp_buf, "mp", param, sizeof(param)) && parse_int(param, number) &&
         number != this->config.monPeriod) {
-        if (number >= 0 && number <= SHRT_MAX) {
+        if (number > 0 && number <= SHRT_MAX) {
             this->config.monPeriod = static_cast<short>(number);
             ESP_LOGI(TAG, "monPeriod changed: %d", this->config.monPeriod);
             changed = true;
