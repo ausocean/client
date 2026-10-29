@@ -60,6 +60,15 @@ menu "SD Card"
         help
             Maximum transfer size, in bytes. Defaults to 4092 if 0 when DMA enabled, or to SOC_SPI_MAXIMUM_BUFFER_SIZE if DMA is disabled.
 
+    config SD_SPI_FREQ_KHZ
+        int "SPI Clock Frequency (kHz)"
+        range 1000 40000
+        default 10000
+        help
+            Clock frequency used to access the SD card over SPI. The ESP-IDF
+            default is 20 MHz; a lower value can improve reliability on
+            boards that see data CRC errors during long playback sessions.
+
 endmenu
 menu "Amplifier"
     menu "I2C Settings"

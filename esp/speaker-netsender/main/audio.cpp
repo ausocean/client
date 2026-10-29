@@ -26,6 +26,7 @@
 
 #include "include/audio.hpp"
 
+#include <cstdint>
 #include <cstring>
 #include <stdio.h>
 #include <sys/stat.h>
@@ -71,20 +72,36 @@ void url_to_filename(const char *url, char *out_filename)
 
 struct DownloadContext {
     FILE *file;
-    int total_downloaded;
-    int last_logged_percent;
-    int last_logged_bytes;
+    int64_t total_downloaded;
+    int64_t last_logged_bytes;
+    bool write_error;
 };
+
+constexpr const auto DOWNLOAD_TAG = "DOWNLOAD";
+
+// Minimum WAV header size (RIFF + fmt + data chunk headers).
+constexpr const auto WAV_HEADER_SIZE = 44;
 
 esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 {
     switch (evt->event_id) {
     case HTTP_EVENT_ON_DATA: {
-        auto ctx = static_cast<DownloadContext *>(evt->user_data);
+        auto *ctx = static_cast<DownloadContext *>(evt->user_data);
+        if (ctx == nullptr || ctx->file == nullptr) {
+            return ESP_FAIL;
+        }
+
         auto bytes_written = fwrite(evt->data, 1, evt->data_len, ctx->file);
-        ctx->total_downloaded = ctx->total_downloaded + bytes_written;
+        if (bytes_written != static_cast<size_t>(evt->data_len)) {
+            ESP_LOGE(DOWNLOAD_TAG, "short write: wrote %u of %d bytes", static_cast<unsigned>(bytes_written),
+                     evt->data_len);
+            ctx->write_error = true;
+            return ESP_FAIL;
+        }
+
+        ctx->total_downloaded += static_cast<int64_t>(bytes_written);
         if (ctx->total_downloaded >= ctx->last_logged_bytes + 100000) {
-            ESP_LOGI("event", "downloaded %d bytes", ctx->total_downloaded);
+            ESP_LOGI(DOWNLOAD_TAG, "downloaded %lld bytes", static_cast<long long>(ctx->total_downloaded));
             ctx->last_logged_bytes = ctx->total_downloaded;
         }
         break;
@@ -96,6 +113,26 @@ esp_err_t _http_event_handler(esp_http_client_event_t *evt)
     return ESP_OK;
 }
 
+// cached_file_is_valid returns true if path contains a complete WAV file.
+bool cached_file_is_valid(const char *path)
+{
+    struct stat st;
+    if (stat(path, &st) != 0 || st.st_size <= WAV_HEADER_SIZE) {
+        return false;
+    }
+
+    FILE *f = fopen(path, "rb");
+    if (!f) {
+        return false;
+    }
+
+    char header[12] = {};
+    const auto read = fread(header, 1, sizeof(header), f);
+    fclose(f);
+
+    return read == sizeof(header) && memcmp(header, "RIFF", 4) == 0 && memcmp(header + 8, "WAVE", 4) == 0;
+}
+
 esp_err_t download_file_to_sdcard()
 {
     char filename[HASH_FILENAME_LEN];
@@ -104,15 +141,23 @@ esp_err_t download_file_to_sdcard()
     char file_path[128];
     snprintf(file_path, sizeof(file_path), "%s/%s", MOUNT_POINT, filename);
 
-    struct stat buf;
-    if (stat(file_path, &buf) == 0) {
-        ESP_LOGI("DOWNLOAD", "using cached download");
+    if (cached_file_is_valid(file_path)) {
+        ESP_LOGI(DOWNLOAD_TAG, "using cached download");
         return ESP_OK;
     }
 
-    FILE *f = fopen(file_path, "wb");
+    // Remove any incomplete or corrupt cached file before downloading.
+    remove(file_path);
+
+    // Download to a temporary file and only rename it once complete, so a
+    // failed download cannot leave a corrupt file that looks cached.
+    char tmp_path[sizeof(file_path) + 4];
+    snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", file_path);
+    remove(tmp_path);
+
+    FILE *f = fopen(tmp_path, "wb");
     if (!f) {
-        ESP_LOGE("DOWNLOAD", "Failed to open file");
+        ESP_LOGE(DOWNLOAD_TAG, "Failed to open file");
         return ESP_FAIL;
     }
 
@@ -123,8 +168,8 @@ esp_err_t download_file_to_sdcard()
     DownloadContext ctx = {
         .file = f,
         .total_downloaded = 0,
-        .last_logged_percent = 0,
         .last_logged_bytes = 0,
+        .write_error = false,
     };
 
     // Configure the request.
@@ -142,22 +187,58 @@ esp_err_t download_file_to_sdcard()
     auto client = esp_http_client_init(&config);
     if (!client) {
         fclose(f);
+        remove(tmp_path);
         return ESP_FAIL;
     }
+
     auto err = esp_http_client_perform(client);
-    if (err != ESP_OK) {
-        ESP_LOGE("DOWNLOAD", "Failed to perform download: %s", esp_err_to_name(err));
-        fclose(f);
-        esp_http_client_cleanup(client);
-        return ESP_FAIL;
-    }
-
-    ESP_LOGI("DOWNLOAD", "Status = %d, length = %lld", esp_http_client_get_status_code(client),
-             esp_http_client_get_content_length(client));
-
-    fclose(f);
+    auto status = esp_http_client_get_status_code(client);
+    auto content_length = esp_http_client_get_content_length(client);
     esp_http_client_cleanup(client);
 
+    if (err != ESP_OK) {
+        ESP_LOGE(DOWNLOAD_TAG, "Failed to perform download: %s", esp_err_to_name(err));
+        fclose(f);
+        remove(tmp_path);
+        return ESP_FAIL;
+    }
+
+    if (status != 200) {
+        ESP_LOGE(DOWNLOAD_TAG, "unexpected HTTP status: %d", status);
+        fclose(f);
+        remove(tmp_path);
+        return ESP_FAIL;
+    }
+
+    if (ctx.write_error || ctx.total_downloaded <= WAV_HEADER_SIZE) {
+        ESP_LOGE(DOWNLOAD_TAG, "incomplete download (%lld bytes)", static_cast<long long>(ctx.total_downloaded));
+        fclose(f);
+        remove(tmp_path);
+        return ESP_FAIL;
+    }
+
+    if (content_length > 0 && ctx.total_downloaded != content_length) {
+        ESP_LOGE(DOWNLOAD_TAG, "download length mismatch: got %lld of %lld bytes",
+                 static_cast<long long>(ctx.total_downloaded), static_cast<long long>(content_length));
+        fclose(f);
+        remove(tmp_path);
+        return ESP_FAIL;
+    }
+
+    // Flush and close before renaming.
+    if (fclose(f) != 0) {
+        ESP_LOGE(DOWNLOAD_TAG, "unable to close downloaded file");
+        remove(tmp_path);
+        return ESP_FAIL;
+    }
+
+    if (rename(tmp_path, file_path) != 0) {
+        ESP_LOGE(DOWNLOAD_TAG, "unable to move downloaded file into place");
+        remove(tmp_path);
+        return ESP_FAIL;
+    }
+
+    ESP_LOGI(DOWNLOAD_TAG, "downloaded %lld bytes", static_cast<long long>(ctx.total_downloaded));
     return ESP_OK;
 }
 

@@ -39,8 +39,10 @@ void init_sd()
 {
     sdmmc_card_t *card;
 
-    // Use the default host.
+    // Use the default host, but allow the SPI clock to be lowered to improve
+    // reliability on boards that see CRC errors.
     sdmmc_host_t host = SDSPI_HOST_DEFAULT();
+    host.max_freq_khz = CONFIG_SD_SPI_FREQ_KHZ;
 
     // Configure the SPI bus to use the config values.
     spi_bus_config_t bus_cfg = {};
