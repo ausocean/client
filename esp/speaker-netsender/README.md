@@ -30,6 +30,41 @@ Alternatively this can also be run manually via the command line:
 clang-tidy --fix <filepath>
 ```
 
+## Speaker behaviour
+
+### Volume
+
+The `Volume` variable is interpreted as a value from 0 to 100. It is mapped onto
+the TAS5805 digital volume using a square-law amplitude curve
+(`40 * log10(vol / 100)` dB): 100 is 0 dB, 50 is about -12 dB, and 0 mutes the
+output. This keeps lower settings audible and avoids the large jump at the top
+of the range that a linear register mapping produces. The amplifier's positive
+gain range is intentionally not used, so the maximum setting is 0 dB rather
+than +24 dB.
+
+### Audio downloads
+
+Audio files are downloaded to a temporary `<sha256>.wav.tmp` file and only
+renamed to `<sha256>.wav` after the HTTP request succeeds, the complete response
+has been written, and the length matches the server's `Content-Length` where
+provided. Cached files are checked for a valid WAV header before being reused,
+so an interrupted download cannot leave a corrupt file that later looks like a
+cache hit.
+
+### SD card SPI clock
+
+`CONFIG_SD_SPI_FREQ_KHZ` (under the `SD Card` menu) sets the SPI clock used to
+access the SD card, and defaults to 10 MHz. Lowering this value can improve
+reliability on boards that report intermittent `data CRC failed` or
+`sdmmc_read_sectors_dma` errors during long playback sessions (issue #121).
+
+## NetSender component notes
+
+HTTP response parsing operates directly on the fixed response buffer and does
+not allocate temporary strings. Pin readers and the variable parser are plain,
+non-capturing function pointers, so callbacks must be ordinary functions rather
+than lambdas with captures.
+
 ## Running the Pipi host tests
 
 The `pipi` logging component has host tests that build and run natively on your Linux machine, so no ESP32 hardware is required. They live in `components/pipi/host_tests/test_pipi` and are a gtest-based ESP-IDF project that targets the `linux` host.
