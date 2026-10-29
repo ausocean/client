@@ -450,8 +450,8 @@ esp_err_t Netsender::req_config()
 
     // Parse the incoming config from the fixed response buffer. A single
     // buffer is large enough for every config field.
-    static_assert(NETSENDER_IO_SIZE >= NETSENDER_WIFI_SIZE, "config parameter buffer too small");
-    char param[NETSENDER_IO_SIZE];
+    constexpr auto PARAM_BUF_LEN = NETSENDER_IO_SIZE > NETSENDER_WIFI_SIZE ? NETSENDER_IO_SIZE : NETSENDER_WIFI_SIZE;
+    char param[PARAM_BUF_LEN];
     int32_t number = 0;
 
     if (netsender_extract_json(resp_buf, "mp", param, sizeof(param)) && parse_int(param, number) &&
