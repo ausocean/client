@@ -47,20 +47,23 @@ static constexpr auto TAG = "Pipi";
 
 Pipi::Entry::Entry(const int64_t ts, const Level level, const char *msg) : timestamp(ts), level(level), data(msg) {}
 
-esp_err_t Pipi::Entry::write(int fd)
+int Pipi::Entry::format(char *out, size_t out_len) const
 {
+    if (out == nullptr || out_len == 0) {
+        return -1;
+    }
+
     int len = strlen(data);
     if (len > this->MAX_LOG_LENGTH) {
         len = this->MAX_LOG_LENGTH;
     } else if (len < 0) {
-        return ESP_FAIL;
+        return -1;
     }
 
     // Keep in sync with level enums.
     auto LevelStrings = {"info", "warn", "error", "fatal"};
 
-    char marshalled[Pipi::Entry::MAX_LOG_LENGTH + 100];
-    auto marshalled_len = snprintf(marshalled, Pipi::Entry::MAX_LOG_LENGTH + 100,
+    auto marshalled_len = snprintf(out, out_len,
                                    "{"
                                    "\"caller\":\"speaker-netsender\","
                                    "\"timestamp\":%" PRId64 ","
@@ -68,7 +71,18 @@ esp_err_t Pipi::Entry::write(int fd)
                                    "\"message\":\"%s\""
                                    "}\n",
                                    this->timestamp, LevelStrings.begin()[this->level], this->data);
-    if (marshalled_len < 0 || marshalled_len >= sizeof(marshalled)) {
+    if (marshalled_len < 0 || static_cast<size_t>(marshalled_len) >= out_len) {
+        return -1;
+    }
+
+    return marshalled_len;
+}
+
+esp_err_t Pipi::Entry::write(int fd)
+{
+    char marshalled[Pipi::Entry::MAX_LOG_LENGTH + 100];
+    auto marshalled_len = format(marshalled, sizeof(marshalled));
+    if (marshalled_len < 0) {
         return ESP_FAIL;
     }
 
@@ -170,8 +184,10 @@ esp_err_t Pipi::FileLogger::new_file()
     return ESP_OK;
 }
 
-esp_err_t Pipi::FileLogger::log(char *msg)
+esp_err_t Pipi::FileLogger::log(char *msg, char *formatted, size_t formatted_len)
 {
+    std::lock_guard<std::mutex> lock(mutex);
+
     // Example log:
     // I (01:02:03.040) <tag>: <log message>
     //                  ^
@@ -203,11 +219,21 @@ esp_err_t Pipi::FileLogger::log(char *msg)
     std::chrono::system_clock::now();
     auto e = Entry(time(nullptr), level, cut_log);
 
+    if (formatted != nullptr && formatted_len > 0) {
+        if (e.format(formatted, formatted_len) < 0) {
+            formatted[0] = '\0';
+        }
+    }
+
     return e.write(curr_file);
 }
 
+esp_err_t Pipi::FileLogger::log(char *msg) { return log(msg, nullptr, 0); }
+
 int Pipi::FileLogger::get_logs()
 {
+    std::lock_guard<std::mutex> lock(mutex);
+
     auto err = this->new_file();
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "unable to start new log file: %s", esp_err_to_name(err));
