@@ -29,6 +29,7 @@
 
 #include "freertos/FreeRTOS.h" // IWYU pragma: keep
 
+#include <cmath>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -262,15 +263,26 @@ esp_err_t TAS5805::set_volume(uint8_t vol)
     write_reg(TAS5805_CHANGE_BOOK_REG, BOOK::ZERO); // Go to book 0.
 
     // Bound volume.
-    if (vol < 0) {
-        vol = 0;
-    } else if (vol > 100) {
+    if (vol > 100) {
         vol = 100;
     }
 
-    // Scale and invert volume from 0-100 to 255-0.
-    // TODO: Make this a more linear sounding scale.
-    uint8_t cmd = 255 - ((uint16_t)vol * 255 / 100);
+    // The digital volume register is 0x00 = +24 dB, 0x30 = 0 dB, with 0.5 dB
+    // steps down to 0xFF = -103.5 dB. A linear register mapping makes the
+    // lower half of the range almost inaudible while the top end is very loud.
+    // Use a square-law amplitude curve (40 * log10(vol / 100) dB), which gives
+    // a much more natural sounding taper, and cap the output at 0 dB.
+    uint8_t cmd = 0xFF; // Mute.
+    if (vol > 0) {
+        const auto db = 40.0f * std::log10(static_cast<float>(vol) / 100.0f);
+        auto reg = std::lround(48.0f - 2.0f * db); // 48 == 0 dB.
+        if (reg < 48) {
+            reg = 48;
+        } else if (reg > 0xFF) {
+            reg = 0xFF;
+        }
+        cmd = static_cast<uint8_t>(reg);
+    }
 
     // Write the new volume set point.
     write_reg(TAS5805_DIG_VOL_CTRL_REG, cmd);

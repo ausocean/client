@@ -76,7 +76,7 @@ class TAS5805 {
 
     /**
      * @brief sets the digital volume
-     * @param vol volume to set the speaker at (0-100).
+     * @param vol volume to set the speaker at (0 = mute, 100 = 0 dB).
      */
     esp_err_t set_volume(uint8_t vol);
 
