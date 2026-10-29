@@ -184,8 +184,8 @@ constexpr void Netsender::print_config() const
         ESP_LOGI(TAG, "dkey: %s", this->config.dkey);
         ESP_LOGI(TAG, "monPeriod: %d", this->config.monPeriod);
         ESP_LOGI(TAG, "actPeriod: %d", this->config.actPeriod);
-        ESP_LOGI(TAG, "inputs: %d", this->config.inputs);
-        ESP_LOGI(TAG, "outputs: %d", this->config.outputs);
+        ESP_LOGI(TAG, "inputs: %s", this->config.inputs);
+        ESP_LOGI(TAG, "outputs: %s", this->config.outputs);
     } else {
         ESP_LOGI(TAG, "unconfigured device...");
     }
@@ -411,7 +411,8 @@ esp_err_t Netsender::req_config()
 
     // Check the status code.
     // TODO: Handle other status codes.
-    if (auto status_code = esp_http_client_get_status_code(this->http_handle) != 200) {
+    auto status_code = esp_http_client_get_status_code(this->http_handle);
+    if (status_code != 200) {
         lock.unlock();
         ESP_LOGE(TAG, "got non 200 status code: %d", status_code);
         return ESP_FAIL;
@@ -435,18 +436,18 @@ esp_err_t Netsender::req_config()
     }
     if (netsender_extract_json(json_resp, "wi", param) && param != this->config.wifi) {
         pad_copy(this->config.wifi, param.c_str(), NETSENDER_WIFI_SIZE);
-        ESP_LOGI(TAG, "wifi changed: %d", this->config.wifi);
+        ESP_LOGI(TAG, "wifi changed: %s", this->config.wifi);
         changed = true;
     }
     if (netsender_extract_json(json_resp, "dk", param) && param != this->config.dkey) {
         pad_copy(this->config.dkey, param.c_str(), CONFIG_NETSENDER_DKEY_SIZE);
-        ESP_LOGI(TAG, "dkey changed: %d", this->config.dkey);
+        ESP_LOGI(TAG, "dkey changed: %s", this->config.dkey);
         changed = true;
     }
     if (netsender_extract_json(json_resp, "ip", param) && param != this->config.inputs) {
         if (check_pins(param.c_str()) >= 0) {
             pad_copy(this->config.inputs, param.c_str(), NETSENDER_IO_SIZE);
-            ESP_LOGI(TAG, "inputs changed: %d", this->config.inputs);
+            ESP_LOGI(TAG, "inputs changed: %s", this->config.inputs);
             changed = true;
         } else {
             ESP_LOGW(TAG, "invalid inputs: %s", param.c_str());
@@ -455,7 +456,7 @@ esp_err_t Netsender::req_config()
     if (netsender_extract_json(json_resp, "op", param) && param != this->config.outputs) {
         if (check_pins(param.c_str()) >= 0) {
             pad_copy(this->config.outputs, param.c_str(), NETSENDER_IO_SIZE);
-            ESP_LOGI(TAG, "outputs changed: %d", this->config.outputs);
+            ESP_LOGI(TAG, "outputs changed: %s", this->config.outputs);
             changed = true;
         } else {
             ESP_LOGW(TAG, "invalid outputs: %s", param.c_str());
@@ -609,7 +610,8 @@ esp_err_t Netsender::req_poll()
 
     // Check the status code.
     // TODO: Handle other status codes.
-    if (auto status_code = esp_http_client_get_status_code(http_handle) != 200) {
+    auto status_code = esp_http_client_get_status_code(http_handle);
+    if (status_code != 200) {
         lock.unlock();
         ESP_LOGE(TAG, "got non 200 status code: %d", status_code);
         return ESP_FAIL;
