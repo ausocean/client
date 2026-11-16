@@ -42,7 +42,7 @@ LICENSE
 #define ENABLE_DALLAS_TEMP_SENSOR
 #define ENABLE_TSL2591_SENSOR
 #define ENABLE_GPS_SENSOR
-#define ENABLE_SDL_WEATHER_SENSOR
+// #define ENABLE_SDL_WEATHER_SENSOR
 
 
 // If DHT enabled, define type and hardware pins depending on ESP8266 or ESP32
@@ -53,7 +53,7 @@ LICENSE
 #ifdef ESP8266
 #define DHTPIN 12
 #else
-#define DHTPIN 36
+#define DHTPIN 14
 #endif
 #endif
 
@@ -63,7 +63,7 @@ LICENSE
 #ifdef ESP8266
 #define DTPIN 13
 #else
-#define DTPIN 39
+#define DTPIN 13
 #endif
 #endif
 
