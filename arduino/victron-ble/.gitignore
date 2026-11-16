@@ -1,0 +1,5 @@
+/build/
+.zed/
+
+# Don't commit encryption key.
+KEY.h

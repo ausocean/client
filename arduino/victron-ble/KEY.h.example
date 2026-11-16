@@ -1,0 +1,21 @@
+/*
+ * This file is an example format for the required key for the AES-CTR
+ * decryption of the victron advertisement packets. Make a copy of
+ * this file and name it 'Key.h'.
+ *
+ * The key can be retrieved by connecting to the solar charge controller
+ * using the VictronConnect App.
+ *  1. Select the solar charge controller in question
+ *  2. Go to settings
+ *  3. Go to 3 bars in top right > Product Info > Encryption Data > Show
+ *  4. Copy the MAC and encryption key.
+ */
+#pragma once
+
+// Encryption key for the Victron Solar Charge Controller.
+const uint8_t VICTRON_KEY[16] = {
+  0xFF, 0xFF, 0xFF, 0xFF,
+  0xFF, 0xFF, 0xFF, 0xFF,
+  0xFF, 0xFF, 0xFF, 0xFF,
+  0xFF, 0xFF, 0xFF, 0xFF,
+};

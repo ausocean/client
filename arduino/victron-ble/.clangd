@@ -1,0 +1,21 @@
+If:
+  PathMatch: .*\.ino$
+CompileFlags:
+  Add:
+    - -x
+    - c++
+    - -include
+    - Arduino.h
+    - -isystem/home/david/.arduino15/packages/esp32/tools/esp-x32/2411/bin/../lib/gcc/xtensa-esp-elf/14.2.0/../../../../xtensa-esp-elf/include/c++/14.2.0
+    - -isystem/home/david/.arduino15/packages/esp32/tools/esp-x32/2411/bin/../lib/gcc/xtensa-esp-elf/14.2.0/../../../../xtensa-esp-elf/include/c++/14.2.0/xtensa-esp-elf/esp32
+    - -isystem/home/david/.arduino15/packages/esp32/tools/esp-x32/2411/bin/../lib/gcc/xtensa-esp-elf/14.2.0/../../../../xtensa-esp-elf/include/c++/14.2.0/backward
+    - -isystem/home/david/.arduino15/packages/esp32/tools/esp-x32/2411/bin/../lib/gcc/xtensa-esp-elf/14.2.0/include
+    - -isystem/home/david/.arduino15/packages/esp32/tools/esp-x32/2411/bin/../lib/gcc/xtensa-esp-elf/14.2.0/include-fixed
+    - -isystem/home/david/.arduino15/packages/esp32/tools/esp-x32/2411/bin/../lib/gcc/xtensa-esp-elf/14.2.0/../../../../xtensa-esp-elf/include
+  CompilationDatabase: build
+  Remove:
+    - -mlongcalls
+    - -fno-tree-switch-conversion
+    - -fstrict-volatile-bitfields
+    - -mdisable-hardware-atomics
+    - -mtext-section-literals
