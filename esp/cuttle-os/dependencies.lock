@@ -1,0 +1,17 @@
+dependencies:
+  idf:
+    source:
+      type: idf
+    version: 6.0.2
+  netsender:
+    dependencies: []
+    source:
+      path: ../speaker-netsender/components/netsender
+      type: local
+    version: '*'
+direct_dependencies:
+- idf
+- netsender
+manifest_hash: 8f446c7652149edc175c1c1278987c0963baf1b5d8580623cc03c68e2fcf6a9b
+target: esp32
+version: 3.0.0
