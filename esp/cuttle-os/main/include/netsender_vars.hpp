@@ -1,5 +1,4 @@
 #pragma once
-#include <algorithm>
 #include <array>
 #include <charconv>
 #include <cstdio>
@@ -148,9 +147,7 @@ inline void update_state_member(device_var_state_t &state, std::string_view var_
 inline esp_err_t write_vars_to_file(const device_var_state_t &state, const char *file_path)
 {
     FILE *fd = fopen(file_path, "w");
-    if (fd == NULL) {
-        return ESP_FAIL;
-    }
+    if (fd == NULL) return ESP_FAIL;
 
     if (fprintf(fd, "%s:%d\n", var::VAR_ID_VS, state.vs) < 0) {
         fclose(fd);
