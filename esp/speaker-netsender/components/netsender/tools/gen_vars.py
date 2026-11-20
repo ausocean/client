@@ -6,23 +6,12 @@ from typing import Any
 
 def astyle_format_file(filepath: str) -> None:
     """
-    Formats the specified filepath using the astyle settings used for c/c++ files.
+    Formats the specified filepath using clang-format.
     """
     # Astyle command used to format c/c++ files.
     command: list[str] = [
-        "astyle",
-        "--style=otbs",
-        "--attach-namespaces",
-        "--attach-classes",
-        "--indent=spaces=4",
-        "--convert-tabs",
-        "--align-reference=name",
-        "--keep-one-line-statements",
-        "--pad-header",
-        "--pad-oper",
-        "--unpad-paren",
-        "--max-continuation-indent=120",
-        "-n",
+        "clang-format",
+        "-i",
         filepath,
     ]
 
