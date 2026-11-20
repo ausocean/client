@@ -34,3 +34,7 @@
  * @returns err
  */
 esp_err_t init_wifi();
+
+esp_err_t wifi_off();
+
+esp_err_t wifi_on();
