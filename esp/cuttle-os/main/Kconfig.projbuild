@@ -1,0 +1,15 @@
+menu "WiFi"
+
+    config WIFI_DEFAULT_SSID
+        string "Default SSID"
+        default "netreceiver"
+        help
+            Default SSID for unconfigured or unset devices to connect to.
+
+    config WIFI_DEFAULT_PASS
+        string "Default WiFi Password"
+        default "netsender"
+        help
+            Default password for unconfigured or unset devices to use to connect to the default SSID network.
+
+endmenu

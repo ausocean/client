@@ -1,0 +1,20 @@
+{
+  "cuttle-os": {
+    "v0.0.1": {
+      "variables": [
+        { "name": "LogLevel", "type": "int32" },
+        { "name": "Pulses", "type": "int32" },
+        { "name": "PulseWidth", "type": "int32" },
+        { "name": "PulseDutyCycle", "type": "int32" },
+        { "name": "PulseCycle", "type": "int32" },
+        { "name": "AutoRestart", "type": "int32" },
+        { "name": "AlarmPeriod", "type": "int32" },
+        { "name": "AlarmNetwork", "type": "int32" },
+        { "name": "AlarmVoltage", "type": "int32" },
+        { "name": "AlarmRecoveryVoltage", "type": "int32" },
+        { "name": "PeakVoltage", "type": "int32" },
+        { "name": "HeartbeatPeriod", "type": "int32" }
+      ]
+    }
+  }
+}
