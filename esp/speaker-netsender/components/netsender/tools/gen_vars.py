@@ -80,7 +80,7 @@ def generate_header(json_path: str, output_path: str) -> None:
     with open(output_path, "w") as f:
         # Add includes.
         f.write(
-            '#pragma once\n#include <algorithm>\n#include <array>\n#include <charconv>\n#include <cstdio>\n#include <cstring>\n#include <optional>\n#include <string_view>\n\n#include "esp_err.h"\n#include "esp_log.h"\n\n'
+            '#pragma once\n#include <array>\n#include <charconv>\n#include <cstdio>\n#include <cstring>\n#include <optional>\n#include <string_view>\n\n#include "esp_err.h"\n#include "esp_log.h"\n#include "nvs.h"\n#include "nvs_flash.h"\n\n'
         )
         f.write(f"// Generated for {client_name} {latest_version}\n\n")
 
@@ -124,6 +124,8 @@ def generate_header(json_path: str, output_path: str) -> None:
             else:
                 f.write(f"    {c_type} {var['name']};\n")
         f.write("};\n\n")
+
+        f.write(f'static constexpr auto NVS_VAR_KEY = "variables";\n\n')
 
         # Add helpers to parse the variables into the struct without allocating.
         f.write(
@@ -233,6 +235,65 @@ def generate_header(json_path: str, output_path: str) -> None:
                     }
 
                     fclose(fd);
+                    return vars;
+                }
+
+            """)
+
+        f.write("""
+                inline esp_err_t write_vars_to_nvs(const device_var_state_t &state)
+                {
+                    auto err = nvs_flash_init();
+                    if (err != ESP_OK) {
+                        return err;
+                    }
+
+                    nvs_handle_t nvs_handle;
+
+                    err = nvs_open("netsender", NVS_READWRITE, &nvs_handle);
+                    if (err != ESP_OK) {
+                        return err;
+                    }
+
+                    auto var_size = sizeof(device_var_state_t);
+                    err = nvs_set_blob(nvs_handle, NVS_VAR_KEY, &state, var_size);
+                    if (err != ESP_OK) {
+                        return err;
+                    }
+
+                    err = nvs_commit(nvs_handle);
+                    if (err != ESP_OK) {
+                        return err;
+                    }
+
+                    nvs_close(nvs_handle);
+
+                    return ESP_OK;
+                }
+
+                inline std::optional<device_var_state_t> read_vars_from_nvs()
+                {
+                    auto err = nvs_flash_init();
+                    if (err != ESP_OK) {
+                        return std::nullopt;
+                    }
+
+                    // New handle to access non-volatile storage.
+                    nvs_handle_t nvs_handle;
+
+                    // Open non-volatile storage and attach to handle.
+                    err = nvs_open("netsender", NVS_READWRITE, &nvs_handle);
+                    if (err != ESP_OK) {
+                        return std::nullopt;
+                    }
+
+                    device_var_state_t vars;
+                    size_t var_size;
+                    err = nvs_get_blob(nvs_handle, NVS_VAR_KEY, &vars, &var_size);
+                    if (var_size != sizeof(device_var_state_t)) {
+                        return std::nullopt;
+                    }
+
                     return vars;
                 }
             """)
