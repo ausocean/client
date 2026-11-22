@@ -1,0 +1,48 @@
+/*
+  Name:
+    battery.hpp - Battery management for CuttleOS.
+
+  Authors:
+    David Sutton <davidsutton@ausocean.org>
+
+  License:
+    Copyright (C) 2026 The Australian Ocean Lab (AusOcean).
+
+    This file is part of CuttleOS. CuttleOS is free software: you can
+    redistribute it and/or modify it under the terms of the GNU
+    General Public License as published by the Free Software
+    Foundation, either version 3 of the License, or (at your option)
+    any later version.
+
+    CuttleOS is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with CuttleOS in gpl.txt.  If not, see
+    <http://www.gnu.org/licenses/>.
+*/
+
+#pragma once
+
+#include <optional>
+
+#include "esp_err.h"
+
+// Battery pin.
+constexpr auto BATTERY_PIN = 4;
+
+/**
+ * @brief initialises the battery analog sensor.
+ *
+ * @returns error
+ */
+esp_err_t init_battery();
+
+/**
+ * @brief reads the analog pin associated with the battery.
+ *
+ * @returns analog value
+ */
+std::optional<long long> read_battery();
