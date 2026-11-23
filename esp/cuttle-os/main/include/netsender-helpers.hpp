@@ -32,6 +32,7 @@
 #include "esp_log.h"
 
 #include "include/netsender_vars.hpp"
+#include "include/wifi.hpp"
 #include "netsender.hpp"
 
 // Logging tag.
@@ -113,4 +114,10 @@ std::optional<int32_t> load_stored_vars()
         vars = stored;
     }
     return stored.vs;
+}
+
+esp_err_t config_callback(netsender_configuration_t *config)
+{
+    // Update WiFi connection.
+    return wifi_set_credentials(config->wifi);
 }

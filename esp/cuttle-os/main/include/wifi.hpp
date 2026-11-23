@@ -28,6 +28,8 @@
 
 #include "esp_err.h"
 
+#include "netsender.hpp"
+
 /**
  * @brief Initialises WiFi
  *
@@ -35,6 +37,31 @@
  */
 esp_err_t init_wifi();
 
+/**
+ * @brief turns off WiFi.
+ *
+ * wifi_off can be used to turn off wifi, and prevent reconnections. This can be
+ * used to temporarily disable wifi whilst making an ADC reading.
+ *
+ * @returns err
+ */
 esp_err_t wifi_off();
 
+/**
+ * @brief turns on and reconnects WiFi.
+ *
+ * wifi_on can be used to turn on wifi after it has been previously configured
+ * using init_wifi.
+ *
+ * @returns err
+ */
 esp_err_t wifi_on();
+
+/**
+ * @brief sets ssid and password for WiFi connections
+ *
+ * uses a comma separated ssid and pass (<SSID>,<PASS>)
+ *
+ * @returns err
+ */
+esp_err_t wifi_set_credentials(const char *credentials);
