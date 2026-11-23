@@ -39,7 +39,7 @@ extern "C" {
 void app_main();
 }
 
-static constexpr auto CUTTLE_OS_VERSION = "0.0.1";
+static constexpr auto CUTTLE_OS_VERSION = "0.1.0";
 
 // Logging tag.
 static constexpr auto LOG_TAG = "CuttleOS";
@@ -59,12 +59,23 @@ void app_main(void)
     if (err != ESP_OK) {
         while (true);
     }
+    err = wifi_set_credentials(ns.get_wifi_credentials());
+    if (err != ESP_OK) {
+        while (true);
+    }
     ESP_LOGI(LOG_TAG, "WiFi initialised");
 
     // Register variable parser.
     err = ns.register_variable_parser(parse_vars);
     if (err != ESP_OK) {
         ESP_LOGE(LOG_TAG, "Unable to register NetSender variable parser: %s", esp_err_to_name(err));
+        while (true);
+    }
+
+    // Register config callback.
+    err = ns.register_config_callback(config_callback);
+    if (err != ESP_OK) {
+        ESP_LOGE(LOG_TAG, "Unable to register config callback function: %s", esp_err_to_name(err));
         while (true);
     }
 
