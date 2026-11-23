@@ -46,7 +46,7 @@ constexpr const auto NETSENDER_WIFI_SIZE = 80;
 constexpr const auto NETSENDER_PIN_SIZE = 4;
 constexpr const auto NETSENDER_IO_SIZE = (CONFIG_NETSENDER_MAX_PINS * NETSENDER_PIN_SIZE);
 constexpr const auto NETSENDER_MAX_HANDLERS = 2;
-constexpr const auto NETSENDER_VERSION = "0.1.0";
+constexpr const auto NETSENDER_VERSION = "0.2.0";
 
 // Device modes.
 namespace netsender_mode {
@@ -119,6 +119,7 @@ struct netsender_configuration_t {
 using pin_read_fn = std::optional<int64_t> (*)();
 using pin_read_binary_fn = std::optional<std::vector<uint8_t>> (*)();
 using variable_parser_fn = esp_err_t (*)(const char *);
+using config_callback_fn = esp_err_t (*)(netsender_configuration_t *);
 
 // Pin represents a pin name and value and optional POST data.
 struct netsender_pin_t {
@@ -151,6 +152,11 @@ class Netsender {
     constexpr void print_config() const;
 
     /**
+     * @brief get wifi credentials.
+     */
+    const char *get_wifi_credentials();
+
+    /**
      * @brief append a read function and associated pin.
      */
     esp_err_t register_input(char *pin_name, pin_read_fn read_func);
@@ -166,6 +172,13 @@ class Netsender {
      * @param parser_func callback function to be called with the var request response.
      */
     esp_err_t register_variable_parser(variable_parser_fn parser_func);
+
+    /**
+     * @brief register a callback to be called on config updates.
+     *
+     * @param config_callback_func callback function to be called on the config update.
+     */
+    esp_err_t register_config_callback(config_callback_fn config_callback_func);
 
     /**
      * @brief makes a request to get variables.
@@ -301,4 +314,11 @@ class Netsender {
      * @brief callback used to handle variable parsing.
      */
     variable_parser_fn parse_variable_callback = nullptr;
+
+    /** @brief callback function for configuration changes
+     *
+     * called when the configuration has changed. This is set
+     * by calling register_config_callback()
+     */
+    config_callback_fn config_callback = nullptr;
 };

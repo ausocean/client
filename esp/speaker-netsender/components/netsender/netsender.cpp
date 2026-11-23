@@ -226,6 +226,8 @@ constexpr void Netsender::print_config() const
     }
 }
 
+const char *Netsender::get_wifi_credentials() { return this->config.wifi; }
+
 esp_err_t Netsender::register_input(char pin_name[NETSENDER_PIN_SIZE], pin_read_fn read_func)
 {
     if (input_cnt >= CONFIG_NETSENDER_MAX_PINS) {
@@ -269,6 +271,15 @@ esp_err_t Netsender::register_variable_parser(variable_parser_fn parser_func)
     ESP_LOGD(TAG, "registering new variable callback");
 
     this->parse_variable_callback = parser_func;
+
+    return ESP_OK;
+}
+
+esp_err_t Netsender::register_config_callback(config_callback_fn config_callback_func)
+{
+    ESP_LOGD(TAG, "registering new config callback");
+
+    this->config_callback = config_callback_func;
 
     return ESP_OK;
 }
@@ -514,6 +525,9 @@ esp_err_t Netsender::req_config()
         this->configured = true;
         write_nvs_config();
         print_config();
+        if (this->config_callback != nullptr) {
+            config_callback(&this->config);
+        }
     }
 
     return ESP_OK;
