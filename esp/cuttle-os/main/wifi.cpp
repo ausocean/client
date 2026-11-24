@@ -37,6 +37,7 @@
 #include "esp_wifi_default.h"
 #include "esp_wifi_types_generic.h"
 #include "freertos/idf_additions.h"
+#include "freertos/projdefs.h"
 
 #include "netsender.hpp"
 #include "sdkconfig.h"
@@ -179,19 +180,11 @@ esp_err_t init_wifi()
         return err;
     }
 
-    err = esp_wifi_set_config(WIFI_IF_STA, &wifi_config);
+    return esp_wifi_set_config(WIFI_IF_STA, &wifi_config);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "unable to set wifi config: %s", esp_err_to_name(err));
         return err;
     }
-
-    err = esp_wifi_start();
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "unable to start wifi: %s", esp_err_to_name(err));
-        return err;
-    }
-
-    return _wifi_wait_connected();
 }
 
 esp_err_t wifi_off()
@@ -204,7 +197,13 @@ esp_err_t wifi_off()
 esp_err_t wifi_on()
 {
     xEventGroupClearBits(s_wifi_event_group, WIFI_DISABLED);
-    return esp_wifi_start();
+    auto err = esp_wifi_start();
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    xEventGroupWaitBits(s_wifi_event_group, WIFI_CONNECTED_BIT, false, false, pdMS_TO_TICKS(5000));
+    return ESP_OK;
 }
 
 esp_err_t _use_default_creds(char *ssid, size_t ssid_size, char *pass, size_t pass_size)

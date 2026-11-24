@@ -7,3 +7,5 @@ set(IDF_TOOLCHAIN "clang" CACHE STRING "Compiler toolchain (gcc or clang)")
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(cuttle-os)
+
+target_compile_options(__idf_bt PRIVATE -Wno-sometimes-uninitialized)
