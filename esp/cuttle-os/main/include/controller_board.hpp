@@ -1,6 +1,6 @@
 /*
   Name:
-    battery.hpp - Battery management for CuttleOS.
+    controller_board.hpp - abstract hardware info for the controller PCB.
 
   Authors:
     David Sutton <davidsutton@ausocean.org>
@@ -26,23 +26,30 @@
 
 #pragma once
 
+#include <cstdint>
 #include <optional>
 
-#include "esp_err.h"
+// Pre-definition.
+class ControllerBoard;
 
-// Battery pin.
-constexpr auto BATTERY_PIN = 4;
-
-/**
- * @brief initialises the battery analog sensor.
- *
- * @returns error
- */
-esp_err_t init_battery();
+// Singleton instance of controller board hardware.
+extern ControllerBoard hw;
 
 /**
- * @brief reads the analog pin associated with the battery.
+ * @brief hardware abstraction for the controller board
  *
- * @returns analog value
+ * Defines the interface for reading sensors, and controlling common actuators.
  */
-std::optional<long long> read_battery();
+class ControllerBoard {
+  public:
+    /** @brief default constructor */
+    ControllerBoard();
+
+    /**
+     * @brief gets the current battery voltage
+     *
+     * @returns the calibrated battery voltage where the returned value is an
+     * integer where the LSB represents 10mV.
+     */
+    std::optional<int32_t> battery_voltage();
+};

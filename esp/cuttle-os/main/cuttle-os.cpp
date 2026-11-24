@@ -28,8 +28,9 @@
 #include <esp_log.h>
 
 #include "esp_err.h"
+#include "freertos/idf_additions.h"
+#include "freertos/projdefs.h"
 
-#include "include/battery.hpp"
 #include "include/netsender-helpers.hpp"
 #include "include/netsender_vars.hpp"
 #include "include/wifi.hpp"
@@ -55,15 +56,8 @@ void app_main(void)
     ESP_LOGI(LOG_TAG, "ICD Version: %s", netsender::ICD_VERSION);
     ESP_LOGI(LOG_TAG, "NetSender Version: %s", NETSENDER_VERSION);
 
-    ESP_LOGI(LOG_TAG, "Initialising Battery");
-    auto err = init_battery();
-    if (err != ESP_OK) {
-        while (true);
-    }
-    ESP_LOGI(LOG_TAG, "Battery initialised");
-
     ESP_LOGI(LOG_TAG, "Initialising WiFi");
-    err = init_wifi();
+    auto err = init_wifi();
     if (err != ESP_OK) {
         while (true);
     }
@@ -97,8 +91,14 @@ void app_main(void)
 
     // Register Battery Pin.
     char pin_name[4] = "A4";
-    ns.register_input(pin_name, read_battery);
+    ns.register_input(pin_name, read_battery_pin);
 
     // Start NetSender Task.
     ns.start();
+
+    while (true) {
+        // Read victron battery.
+
+        vTaskDelay(pdMS_TO_TICKS(5000));
+    }
 }

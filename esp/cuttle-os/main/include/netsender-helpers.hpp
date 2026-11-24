@@ -31,9 +31,10 @@
 
 #include "esp_log.h"
 
-#include "include/netsender_vars.hpp"
-#include "include/wifi.hpp"
+#include "controller_board.hpp"
 #include "netsender.hpp"
+#include "netsender_vars.hpp"
+#include "wifi.hpp"
 
 // Logging tag.
 static auto TAG = "NetSender Helper";
@@ -121,3 +122,5 @@ esp_err_t config_callback(netsender_configuration_t *config)
     // Update WiFi connection.
     return wifi_set_credentials(config->wifi);
 }
+
+std::optional<long long> read_battery_pin() { return hw.battery_voltage(); }
