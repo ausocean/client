@@ -1,6 +1,6 @@
 /*
   Name:
-    battery.cpp - Battery management for CuttleOS.
+    v4revB.cpp - concrete implementation of the ControllerBoard interface.
 
   Authors:
     David Sutton <davidsutton@ausocean.org>
@@ -24,26 +24,31 @@
     <http://www.gnu.org/licenses/>.
 */
 
-#include "include/battery.hpp"
-
+#include <cstdint>
 #include <optional>
 
 #include "esp_adc/adc_oneshot.h"
 #include "esp_err.h"
 #include "esp_log.h"
-#include "esp_wifi.h"
 #include "freertos/idf_additions.h"
-#include "freertos/projdefs.h"
 #include "hal/adc_types.h"
 
-#include "include/wifi.hpp"
+#include "controller_board.hpp"
+#include "victron_ble.hpp"
+#include "wifi.hpp"
 
-// Logging tag.
-static constexpr auto TAG = "Battery";
+// Singleton instance of controller board hardware.
+ControllerBoard hw;
 
+// Battery ADC handle.
 static adc_oneshot_unit_handle_t battery_handle;
 
-esp_err_t init_battery()
+// Logging tag.
+static constexpr auto TAG = "v4revB";
+
+ControllerBoard::ControllerBoard() {}
+
+esp_err_t ControllerBoard::init()
 {
     adc_oneshot_unit_init_cfg_t init_config1 = {
         .unit_id = ADC_UNIT_2,
@@ -57,7 +62,7 @@ esp_err_t init_battery()
     }
 
     adc_oneshot_chan_cfg_t config = {
-        .atten = ADC_ATTEN_DB_0,
+        .atten = ADC_ATTEN_DB_12,
         .bitwidth = ADC_BITWIDTH_DEFAULT,
     };
     err = adc_oneshot_config_channel(battery_handle, ADC_CHANNEL_0, &config);
@@ -66,11 +71,28 @@ esp_err_t init_battery()
         return err;
     }
 
+    // Init victron BLE.
+    err = victron_ble_init();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "unable to init victron BLE: %s", esp_err_to_name(err));
+        return err;
+    }
+
     return ESP_OK;
 }
 
-std::optional<long long> read_battery()
+std::optional<int32_t> ControllerBoard::battery_voltage()
 {
+    // Try getting victron data.
+    // TODO: Consider using this for auto-calibration.
+    auto data = victron_ble_get_data();
+    if (data.has_value()) {
+        ESP_LOGI(TAG, "using victron value: %d", data->battery_voltage);
+        return data->battery_voltage;
+    }
+
+    ESP_LOGW(TAG, "falling back to ADC reading");
+
     auto err = wifi_off();
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "failed to turn wifi off: %s", esp_err_to_name(err));
@@ -80,8 +102,8 @@ std::optional<long long> read_battery()
     int raw;
     err = adc_oneshot_read(battery_handle, ADC_CHANNEL_0, &raw);
 
-    err = wifi_on();
-    if (err != ESP_OK) {
+    auto err_wifi = wifi_on();
+    if (err_wifi != ESP_OK) {
         ESP_LOGE(TAG, "failed to turn wifi on: %s", esp_err_to_name(err));
     }
 
